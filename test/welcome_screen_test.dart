@@ -1,5 +1,7 @@
+import 'package:boardroom/core/config/app_config.dart';
 import 'package:boardroom/features/home/presentation/welcome_screen.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 
@@ -38,20 +40,31 @@ Future<void> _pumpAt(WidgetTester tester, Size size) async {
         path: '/login',
         builder: (context, state) => const Scaffold(body: Text('login')),
       ),
+      GoRoute(
+        path: '/register',
+        builder: (context, state) => const Scaffold(body: Text('register')),
+      ),
     ],
   );
   addTearDown(router.dispose);
 
   await tester.pumpWidget(
-    MaterialApp.router(
-      routerConfig: router,
-      builder: (context, child) {
-        return MediaQuery(
-          data: MediaQuery.of(context)
-              .copyWith(textScaler: const TextScaler.linear(1.3)),
-          child: child ?? const SizedBox.shrink(),
-        );
-      },
+    ProviderScope(
+      overrides: [
+        appConfigProvider.overrideWithValue(
+          const AppConfig(apiBaseUrl: 'http://localhost'),
+        ),
+      ],
+      child: MaterialApp.router(
+        routerConfig: router,
+        builder: (context, child) {
+          return MediaQuery(
+            data: MediaQuery.of(context)
+                .copyWith(textScaler: const TextScaler.linear(1.3)),
+            child: child ?? const SizedBox.shrink(),
+          );
+        },
+      ),
     ),
   );
   await tester.pumpAndSettle();

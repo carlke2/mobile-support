@@ -2,8 +2,38 @@ import 'package:flutter/material.dart';
 
 import 'app_tokens.dart';
 
+class AppMetrics extends ThemeExtension<AppMetrics> {
+  const AppMetrics({required this.blurSigma});
+
+  final double blurSigma;
+
+  @override
+  AppMetrics copyWith({double? blurSigma}) {
+    return AppMetrics(blurSigma: blurSigma ?? this.blurSigma);
+  }
+
+  @override
+  AppMetrics lerp(ThemeExtension<AppMetrics>? other, double t) {
+    if (other is! AppMetrics) {
+      return this;
+    }
+    return AppMetrics(blurSigma: blurSigma + (other.blurSigma - blurSigma) * t);
+  }
+}
+
+/// Configured blur, halved when the shortest side is under 360 logical pixels.
+double blurSigmaOf(BuildContext context) {
+  final configured =
+      Theme.of(context).extension<AppMetrics>()?.blurSigma ?? AppBlur.glass;
+  final shortest = MediaQuery.sizeOf(context).shortestSide;
+  if (shortest < 360) {
+    return configured * 0.5;
+  }
+  return configured;
+}
+
 abstract final class AppTheme {
-  static ThemeData get dark {
+  static ThemeData dark({double blurSigma = AppBlur.glass}) {
     const scheme = ColorScheme.dark(
       surface: AppColors.background,
       primary: AppColors.accent,
@@ -27,6 +57,7 @@ abstract final class AppTheme {
         labelLarge: AppTypography.label,
         bodySmall: AppTypography.caption,
       ),
+      extensions: <ThemeExtension<dynamic>>[AppMetrics(blurSigma: blurSigma)],
     );
   }
 }

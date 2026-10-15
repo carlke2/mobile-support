@@ -30,6 +30,36 @@ class AuthRepository {
     );
     return loginResponseFromJson(body);
   }
+
+  Future<void> register({
+    required String name,
+    required String email,
+    required String phone,
+    required String password,
+  }) async {
+    await _client.postJson('/auth/register', <String, dynamic>{
+      'name': name,
+      'email': email,
+      'phone': phone,
+      'password': password,
+    });
+  }
+
+  Future<void> forgotPassword({required String email}) async {
+    await _client.postJson('/auth/forgot-password', <String, dynamic>{
+      'email': email,
+    });
+  }
+
+  Future<void> resetPassword({
+    required String token,
+    required String newPassword,
+  }) async {
+    await _client.postJson('/auth/reset-password', <String, dynamic>{
+      'token': token,
+      'newPassword': newPassword,
+    });
+  }
 }
 
 final authRepositoryProvider = Provider<AuthRepository>((ref) {

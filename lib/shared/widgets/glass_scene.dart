@@ -2,6 +2,7 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 
+import '../../core/theme/app_theme.dart';
 import '../../core/theme/app_tokens.dart';
 
 /// Full-screen charcoal gradient with a blurred rainy-street scene.
@@ -44,12 +45,10 @@ class _RainyStreet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final sigma = blurSigmaOf(context);
     return ClipRect(
       child: ImageFiltered(
-        imageFilter: ImageFilter.blur(
-          sigmaX: AppBlur.scene,
-          sigmaY: AppBlur.scene,
-        ),
+        imageFilter: ImageFilter.blur(sigmaX: sigma, sigmaY: sigma),
         child: Transform.scale(
           scale: 1.15,
           child: LayoutBuilder(

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/config/app_config.dart';
 import '../../../core/theme/app_tokens.dart';
 import '../../../shared/widgets/app_logo.dart';
 import '../../../shared/widgets/glass_button.dart';
@@ -64,7 +66,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                             GlassButton(
                               label: 'Create account',
                               variant: GlassButtonVariant.outlined,
-                              onPressed: () {},
+                              onPressed: () => context.push('/register'),
                             ),
                           ],
                         ),
@@ -213,31 +215,32 @@ class _ShadowedLogo extends StatelessWidget {
   }
 }
 
-class _SupportRow extends StatelessWidget {
+class _SupportRow extends ConsumerWidget {
   const _SupportRow();
 
   @override
-  Widget build(BuildContext context) {
-    return const Row(
+  Widget build(BuildContext context, WidgetRef ref) {
+    final phone = ref.watch(
+      appConfigProvider.select((config) => config.supportPhone),
+    );
+    final detail = phone.isEmpty ? 'Available now' : phone;
+    return Row(
       children: [
-        _CircleButton(
+        const _CircleButton(
           label: 'Security',
           diameter: 44,
           icon: Icons.shield_outlined,
         ),
-        SizedBox(width: 10),
-        _CircleButton(
+        const SizedBox(width: 10),
+        const _CircleButton(
           label: 'Call support',
           diameter: 46,
           icon: Icons.phone_outlined,
           emphasized: true,
         ),
-        SizedBox(width: 10),
+        const SizedBox(width: 10),
         Expanded(
-          child: Text(
-            'Call support\nAvailable now',
-            style: AppTypography.support,
-          ),
+          child: Text('Call support\n$detail', style: AppTypography.support),
         ),
       ],
     );

@@ -95,6 +95,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(await storage.readToken(), 'admin-token');
+    expect(find.text('admin'), findsOneWidget);
   });
 
   testWidgets('a 401 shows the server message', (tester) async {
@@ -161,8 +162,24 @@ Future<void> _pumpLogin(
         builder: (context, state) => const Scaffold(body: Text('home')),
       ),
       GoRoute(
+        path: '/staff',
+        builder: (context, state) => const Scaffold(body: Text('staff')),
+      ),
+      GoRoute(
+        path: '/admin',
+        builder: (context, state) => const Scaffold(body: Text('admin')),
+      ),
+      GoRoute(
         path: '/welcome',
         builder: (context, state) => const Scaffold(body: Text('welcome')),
+      ),
+      GoRoute(
+        path: '/register',
+        builder: (context, state) => const Scaffold(body: Text('register')),
+      ),
+      GoRoute(
+        path: '/forgot-password',
+        builder: (context, state) => const Scaffold(body: Text('forgot')),
       ),
     ],
   );

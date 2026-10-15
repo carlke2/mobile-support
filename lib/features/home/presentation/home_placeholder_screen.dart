@@ -10,7 +10,12 @@ import '../../auth/application/auth_controller.dart';
 
 /// TEMPORARY. Dashboards replace this screen next.
 class HomePlaceholderScreen extends ConsumerWidget {
-  const HomePlaceholderScreen({super.key});
+  const HomePlaceholderScreen({
+    super.key,
+    this.heading = 'TEMPORARY — dashboard comes next.',
+  });
+
+  final String heading;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -35,10 +40,7 @@ class HomePlaceholderScreen extends ConsumerWidget {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'TEMPORARY — dashboard comes next.',
-                      style: AppTypography.caption,
-                    ),
+                    Text(heading, style: AppTypography.caption),
                     const SizedBox(height: AppSpacing.md),
                     Text(
                       user == null || user.name.isEmpty

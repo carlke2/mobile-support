@@ -3,7 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../features/auth/application/auth_controller.dart';
+import '../../features/auth/domain/auth_destinations.dart';
+import '../../features/auth/presentation/forgot_password_screen.dart';
 import '../../features/auth/presentation/login_screen.dart';
+import '../../features/auth/presentation/register_screen.dart';
+import '../../features/auth/presentation/reset_password_screen.dart';
 import '../../features/home/presentation/home_placeholder_screen.dart';
 import '../../features/home/presentation/welcome_screen.dart';
 import '../auth/auth_session.dart';
@@ -23,18 +27,13 @@ final routerProvider = Provider<GoRouter>((ref) {
     refreshListenable: refresh,
     redirect: (context, state) {
       final session = ref.read(authSessionProvider);
-      if (session == AuthSession.unknown) {
-        return null;
-      }
-      final location = state.uri.path;
-      final isPublic = location == '/welcome' || location == '/login';
-      if (session == AuthSession.unauthenticated && !isPublic) {
-        return '/welcome';
-      }
-      if (session == AuthSession.authenticated && isPublic) {
-        return '/home';
-      }
-      return null;
+      final role = ref.read(authControllerProvider).asData?.value?.activeRole;
+      return authRedirect(
+        sessionKnown: session != AuthSession.unknown,
+        authenticated: session == AuthSession.authenticated,
+        location: state.uri.path,
+        activeRole: role,
+      );
     },
     routes: [
       GoRoute(
@@ -43,8 +42,34 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(path: '/login', builder: (context, state) => const LoginScreen()),
       GoRoute(
+        path: '/register',
+        builder: (context, state) => const RegisterScreen(),
+      ),
+      GoRoute(
+        path: '/forgot-password',
+        builder: (context, state) => const ForgotPasswordScreen(),
+      ),
+      GoRoute(
+        path: '/reset-password',
+        builder: (context, state) => ResetPasswordScreen(
+          token: state.uri.queryParameters['token'] ?? '',
+        ),
+      ),
+      GoRoute(
         path: '/home',
         builder: (context, state) => const HomePlaceholderScreen(),
+      ),
+      GoRoute(
+        path: '/staff',
+        builder: (context, state) => const HomePlaceholderScreen(
+          heading: 'TEMPORARY — staff queue comes next.',
+        ),
+      ),
+      GoRoute(
+        path: '/admin',
+        builder: (context, state) => const HomePlaceholderScreen(
+          heading: 'TEMPORARY — admin dashboard comes next.',
+        ),
       ),
     ],
   );

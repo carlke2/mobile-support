@@ -83,6 +83,30 @@ class AuthController extends AsyncNotifier<AuthUser?> {
     }
   }
 
+  Future<void> register({
+    required String name,
+    required String email,
+    required String phone,
+    required String password,
+  }) {
+    return ref
+        .read(authRepositoryProvider)
+        .register(name: name, email: email, phone: phone, password: password);
+  }
+
+  Future<void> forgotPassword({required String email}) {
+    return ref.read(authRepositoryProvider).forgotPassword(email: email);
+  }
+
+  Future<void> resetPassword({
+    required String token,
+    required String newPassword,
+  }) {
+    return ref
+        .read(authRepositoryProvider)
+        .resetPassword(token: token, newPassword: newPassword);
+  }
+
   Future<void> signOut() async {
     await ref.read(tokenStorageProvider).clear();
     ref.read(authSessionProvider.notifier).markUnauthenticated();
