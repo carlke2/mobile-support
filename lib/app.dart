@@ -4,6 +4,35 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'core/config/app_config.dart';
 import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
+import 'core/theme/app_tokens.dart';
+
+/// Shown instead of crashing when `env/dev.json` is incomplete.
+class SetupRequiredApp extends StatelessWidget {
+  const SetupRequiredApp({required this.config, super.key});
+
+  final AppConfig config;
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'Boardroom',
+      theme: AppTheme.dark(),
+      home: Scaffold(
+        backgroundColor: AppColors.sceneBottom,
+        body: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(AppSpacing.screenHorizontal),
+            child: Text(
+              config.setupMessage,
+              key: const Key('setup-error'),
+              style: AppTypography.body,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
 
 class App extends ConsumerWidget {
   const App({super.key});

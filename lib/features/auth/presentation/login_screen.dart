@@ -8,10 +8,8 @@ import '../../../shared/widgets/app_logo.dart';
 import '../../../shared/widgets/glass_button.dart';
 import '../application/auth_controller.dart';
 import '../domain/auth_destinations.dart';
-import '../domain/login_response.dart';
 import 'auth_fields.dart';
 import 'auth_scaffold.dart';
-import 'role_selection_sheet.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -55,7 +53,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     }
     setState(() => _submitting = true);
     try {
-      final response = await ref
+      final user = await ref
           .read(authControllerProvider.notifier)
           .signIn(
             email: _emailController.text.trim().toLowerCase(),
@@ -64,23 +62,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       if (!mounted) {
         return;
       }
-      switch (response) {
-        case LoginSession():
-          _goHome();
-        case LoginRoleSelection(:final pendingToken, :final roles):
-          setState(() => _submitting = false);
-          final role = await RoleSelectionSheet.show(context, roles);
-          if (!mounted || role == null) {
-            return;
-          }
-          await ref
-              .read(authControllerProvider.notifier)
-              .selectRole(pendingToken: pendingToken, role: role);
-          if (!mounted) {
-            return;
-          }
-          _goHome();
-      }
+      context.go(homeForRole(user.activeRole));
     } on ApiException catch (error) {
       if (!mounted) {
         return;
@@ -96,11 +78,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         setState(() => _submitting = false);
       }
     }
-  }
-
-  void _goHome() {
-    final role = ref.read(authControllerProvider).asData?.value?.activeRole;
-    context.go(homeForRole(role));
   }
 
   @override

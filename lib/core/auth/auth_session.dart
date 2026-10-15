@@ -1,10 +1,9 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-/// Whether a bearer token is present.
+/// Whether a Supabase Auth session is present.
 ///
 /// [AuthSession.unauthenticated] is the signal the router listens for.
-/// The auth interceptor sets it after a 401, and startup sets it when no
-/// token is stored.
+/// The auth controller sets it after sign-out and when startup finds no session.
 enum AuthSession { unknown, authenticated, unauthenticated }
 
 class AuthSessionNotifier extends Notifier<AuthSession> {

@@ -1,7 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../auth/auth_session.dart';
 import '../config/app_config.dart';
 import '../storage/token_storage.dart';
 import 'api_exception.dart';
@@ -74,9 +73,7 @@ final apiClientProvider = Provider<ApiClient>((ref) {
   final client = ApiClient(
     config: ref.watch(appConfigProvider),
     tokenStorage: ref.watch(tokenStorageProvider),
-    onUnauthenticated: () {
-      ref.read(authSessionProvider.notifier).markUnauthenticated();
-    },
+    onUnauthenticated: () {},
   );
   ref.onDispose(client.dispose);
   return client;

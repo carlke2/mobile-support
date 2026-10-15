@@ -11,9 +11,7 @@ import 'auth_fields.dart';
 import 'auth_scaffold.dart';
 
 class ResetPasswordScreen extends ConsumerStatefulWidget {
-  const ResetPasswordScreen({super.key, required this.token});
-
-  final String token;
+  const ResetPasswordScreen({super.key});
 
   @override
   ConsumerState<ResetPasswordScreen> createState() =>
@@ -38,10 +36,6 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
   }
 
   Future<void> _submit() async {
-    if (widget.token.isEmpty) {
-      setState(() => _serverError = 'This reset link is missing a token.');
-      return;
-    }
     final passwordError = passwordMessage(_passwordController.text);
     final confirmError = _confirmController.text != _passwordController.text
         ? 'Passwords do not match'
@@ -58,10 +52,7 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
     try {
       await ref
           .read(authControllerProvider.notifier)
-          .resetPassword(
-            token: widget.token,
-            newPassword: _passwordController.text,
-          );
+          .resetPassword(newPassword: _passwordController.text);
       if (!mounted) {
         return;
       }
@@ -98,12 +89,7 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: AppSpacing.md),
-          if (widget.token.isEmpty)
-            const Text(
-              'This reset link is missing a token.',
-              style: AppTypography.error,
-            )
-          else if (_done)
+          if (_done)
             const Text(
               'Password updated. Sign in with the new password.',
               key: Key('reset-done'),
@@ -169,7 +155,12 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
             ),
           ],
           TextButton(
-            onPressed: () => context.go('/login'),
+            onPressed: () async {
+              await ref.read(authControllerProvider.notifier).signOut();
+              if (context.mounted) {
+                context.go('/login');
+              }
+            },
             child: const Text('Sign in', style: AppTypography.label),
           ),
         ],

@@ -26,7 +26,11 @@ String? authRedirect({
   required bool authenticated,
   required String location,
   required String? activeRole,
+  bool passwordRecovery = false,
 }) {
+  if (passwordRecovery) {
+    return location == '/reset-password' ? null : '/reset-password';
+  }
   if (!sessionKnown) {
     return null;
   }

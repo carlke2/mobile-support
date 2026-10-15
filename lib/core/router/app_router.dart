@@ -11,6 +11,7 @@ import '../../features/auth/presentation/reset_password_screen.dart';
 import '../../features/home/presentation/home_placeholder_screen.dart';
 import '../../features/home/presentation/welcome_screen.dart';
 import '../auth/auth_session.dart';
+import '../auth/password_recovery.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
   // Keep the session controller alive without rebuilding this router.
@@ -18,6 +19,9 @@ final routerProvider = Provider<GoRouter>((ref) {
 
   final refresh = ValueNotifier<int>(0);
   ref.listen<AuthSession>(authSessionProvider, (previous, next) {
+    refresh.value++;
+  });
+  ref.listen<bool>(passwordRecoveryProvider, (previous, next) {
     refresh.value++;
   });
   ref.onDispose(refresh.dispose);
@@ -33,6 +37,7 @@ final routerProvider = Provider<GoRouter>((ref) {
         authenticated: session == AuthSession.authenticated,
         location: state.uri.path,
         activeRole: role,
+        passwordRecovery: ref.read(passwordRecoveryProvider),
       );
     },
     routes: [
@@ -51,9 +56,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/reset-password',
-        builder: (context, state) => ResetPasswordScreen(
-          token: state.uri.queryParameters['token'] ?? '',
-        ),
+        builder: (context, state) => const ResetPasswordScreen(),
       ),
       GoRoute(
         path: '/home',

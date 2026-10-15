@@ -57,6 +57,26 @@ void main() {
       ),
       isNull,
     );
+    expect(
+      authRedirect(
+        sessionKnown: true,
+        authenticated: true,
+        location: '/home',
+        activeRole: 'USER',
+        passwordRecovery: true,
+      ),
+      '/reset-password',
+    );
+    expect(
+      authRedirect(
+        sessionKnown: true,
+        authenticated: true,
+        location: '/reset-password',
+        activeRole: 'USER',
+        passwordRecovery: true,
+      ),
+      isNull,
+    );
   });
 
   test('auth session enum stays the router signal', () {

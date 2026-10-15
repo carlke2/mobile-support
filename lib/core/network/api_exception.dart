@@ -1,6 +1,3 @@
-import 'dart:io';
-
-import 'package:dio/dio.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
 
 part 'api_exception.freezed.dart';
@@ -30,44 +27,6 @@ sealed class ApiException with _$ApiException implements Exception {
 }
 
 const _fallbackMessage = 'Request failed';
-const _networkMessage = 'Unable to reach the server.';
-const _timeoutMessage = 'The request timed out.';
-
-/// Maps a [DioException] into an [ApiException].
-ApiException mapDioException(DioException error) {
-  switch (error.type) {
-    case DioExceptionType.connectionTimeout:
-    case DioExceptionType.sendTimeout:
-    case DioExceptionType.receiveTimeout:
-    case DioExceptionType.transformTimeout:
-      return const ApiException.timeout(message: _timeoutMessage);
-    case DioExceptionType.connectionError:
-      return const ApiException.network(message: _networkMessage);
-    case DioExceptionType.badResponse:
-    case DioExceptionType.cancel:
-    case DioExceptionType.badCertificate:
-    case DioExceptionType.unknown:
-      break;
-  }
-
-  final cause = error.error;
-  if (cause is SocketException || cause is HttpException) {
-    return const ApiException.network(message: _networkMessage);
-  }
-
-  final body = asJsonMap(error.response?.data);
-  if (body != null && body['ok'] == false) {
-    return ApiException.backend(
-      message: messageFromBody(body),
-      statusCode: error.response?.statusCode,
-    );
-  }
-
-  return ApiException.unknown(
-    message: _fallbackMessage,
-    statusCode: error.response?.statusCode,
-  );
-}
 
 /// Returns the JSON object from a successful call.
 ///
