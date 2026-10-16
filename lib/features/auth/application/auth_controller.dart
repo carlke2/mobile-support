@@ -4,7 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/auth/auth_state.dart';
 import '../../../core/auth/password_recovery.dart';
 import '../../../core/network/unauthorized_hub.dart';
-import '../../home/application/home_counts.dart';
+import '../../dashboard/application/dashboard_controller.dart';
+import '../../dashboard/data/dashboard_cache.dart';
 import '../data/auth_repository.dart';
 import '../domain/auth_user.dart';
 
@@ -16,10 +17,14 @@ class AuthController extends Notifier<AuthState> {
   @override
   AuthState build() {
     final hub = ref.read(unauthorizedHubProvider);
-    hub.handler = expireSession;
+    hub.onRefreshInvalid = expireSession;
+    hub.onTokenInvalid = forceSignOut;
     ref.onDispose(() {
-      if (identical(hub.handler, expireSession)) {
-        hub.handler = null;
+      if (identical(hub.onRefreshInvalid, expireSession)) {
+        hub.onRefreshInvalid = null;
+      }
+      if (identical(hub.onTokenInvalid, forceSignOut)) {
+        hub.onTokenInvalid = null;
       }
     });
     if (!_restoreStarted) {
@@ -102,27 +107,6 @@ class AuthController extends Notifier<AuthState> {
     }
   }
 
-  Future<AuthUser> register({
-    required String name,
-    required String email,
-    required String phone,
-    required String password,
-  }) async {
-    _holdSession = true;
-    try {
-      final registered = await ref.read(authRepositoryProvider).register(
-            name: name,
-            email: email,
-            phone: phone,
-            password: password,
-          );
-      state = AuthSignedIn(role: registered.activeRole, user: registered);
-      return registered;
-    } finally {
-      _holdSession = false;
-    }
-  }
-
   Future<void> forgotPassword({required String email}) {
     return ref.read(authRepositoryProvider).forgotPassword(email: email);
   }
@@ -138,18 +122,20 @@ class AuthController extends Notifier<AuthState> {
   }
 
   Future<void> signOut() async {
+    await ref.read(dashboardCacheProvider).clear();
     await ref.read(authRepositoryProvider).signOut();
     _invalidateUserScoped();
     _clearSignedOut();
   }
 
-  /// Called when a refresh token is rejected. Network failures do not come here.
+  /// `refresh_invalid` — show the expired message on login.
   Future<void> expireSession() async {
     if (state is AuthExpired) {
       return;
     }
     _holdSession = true;
     try {
+      await ref.read(dashboardCacheProvider).clear();
       await ref.read(authRepositoryProvider).signOut();
     } finally {
       _holdSession = false;
@@ -160,6 +146,23 @@ class AuthController extends Notifier<AuthState> {
     }
     ref.read(passwordRecoveryProvider.notifier).clear();
     state = const AuthExpired();
+  }
+
+  /// `token_invalid` — signed out without the expired banner.
+  Future<void> forceSignOut() async {
+    _holdSession = true;
+    try {
+      await ref.read(dashboardCacheProvider).clear();
+      await ref.read(authRepositoryProvider).signOut();
+    } finally {
+      _holdSession = false;
+    }
+    _invalidateUserScoped();
+    if (!ref.mounted) {
+      return;
+    }
+    ref.read(passwordRecoveryProvider.notifier).clear();
+    state = const AuthSignedOut();
   }
 
   /// Test / cold-start helper: force a signed-in state without network.
@@ -184,7 +187,7 @@ class AuthController extends Notifier<AuthState> {
   }
 
   void _invalidateUserScoped() {
-    ref.invalidate(homeCountsProvider);
+    ref.invalidate(dashboardControllerProvider);
   }
 
   Future<void> _onChange(AuthChange change) async {

@@ -162,10 +162,10 @@ return unknown(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>({TResult Function( String message,  int? statusCode)?  backend,TResult Function( String message)?  network,TResult Function( String message)?  timeout,TResult Function( String message,  int? statusCode)?  unknown,required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>({TResult Function( String message,  int? statusCode,  String? code)?  backend,TResult Function( String message)?  network,TResult Function( String message)?  timeout,TResult Function( String message,  int? statusCode)?  unknown,required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case ApiExceptionBackend() when backend != null:
-return backend(_that.message,_that.statusCode);case ApiExceptionNetwork() when network != null:
+return backend(_that.message,_that.statusCode,_that.code);case ApiExceptionNetwork() when network != null:
 return network(_that.message);case ApiExceptionTimeout() when timeout != null:
 return timeout(_that.message);case ApiExceptionUnknown() when unknown != null:
 return unknown(_that.message,_that.statusCode);case _:
@@ -186,10 +186,10 @@ return unknown(_that.message,_that.statusCode);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>({required TResult Function( String message,  int? statusCode)  backend,required TResult Function( String message)  network,required TResult Function( String message)  timeout,required TResult Function( String message,  int? statusCode)  unknown,}) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>({required TResult Function( String message,  int? statusCode,  String? code)  backend,required TResult Function( String message)  network,required TResult Function( String message)  timeout,required TResult Function( String message,  int? statusCode)  unknown,}) {final _that = this;
 switch (_that) {
 case ApiExceptionBackend():
-return backend(_that.message,_that.statusCode);case ApiExceptionNetwork():
+return backend(_that.message,_that.statusCode,_that.code);case ApiExceptionNetwork():
 return network(_that.message);case ApiExceptionTimeout():
 return timeout(_that.message);case ApiExceptionUnknown():
 return unknown(_that.message,_that.statusCode);}
@@ -206,10 +206,10 @@ return unknown(_that.message,_that.statusCode);}
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>({TResult? Function( String message,  int? statusCode)?  backend,TResult? Function( String message)?  network,TResult? Function( String message)?  timeout,TResult? Function( String message,  int? statusCode)?  unknown,}) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>({TResult? Function( String message,  int? statusCode,  String? code)?  backend,TResult? Function( String message)?  network,TResult? Function( String message)?  timeout,TResult? Function( String message,  int? statusCode)?  unknown,}) {final _that = this;
 switch (_that) {
 case ApiExceptionBackend() when backend != null:
-return backend(_that.message,_that.statusCode);case ApiExceptionNetwork() when network != null:
+return backend(_that.message,_that.statusCode,_that.code);case ApiExceptionNetwork() when network != null:
 return network(_that.message);case ApiExceptionTimeout() when timeout != null:
 return timeout(_that.message);case ApiExceptionUnknown() when unknown != null:
 return unknown(_that.message,_that.statusCode);case _:
@@ -224,11 +224,12 @@ return unknown(_that.message,_that.statusCode);case _:
 
 
 class ApiExceptionBackend implements ApiException {
-  const ApiExceptionBackend({required this.message, this.statusCode});
+  const ApiExceptionBackend({required this.message, this.statusCode, this.code});
   
 
 @override final  String message;
  final  int? statusCode;
+ final  String? code;
 
 /// Create a copy of ApiException
 /// with the given fields replaced by the non-null parameter values.
@@ -240,18 +241,18 @@ $ApiExceptionBackendCopyWith<ApiExceptionBackend> get copyWith => _$ApiException
 
 @override
 bool operator ==(Object other) {
-    return identical(this, other) || (other.runtimeType == runtimeType&&other is ApiExceptionBackend&&(identical(other.message, message) || other.message == message)&&(identical(other.statusCode, statusCode) || other.statusCode == statusCode));
+    return identical(this, other) || (other.runtimeType == runtimeType&&other is ApiExceptionBackend&&(identical(other.message, message) || other.message == message)&&(identical(other.statusCode, statusCode) || other.statusCode == statusCode)&&(identical(other.code, code) || other.code == code));
 }
 
 
 @override
 int get hashCode {
-    return Object.hash(runtimeType,message,statusCode);
+    return Object.hash(runtimeType,message,statusCode,code);
 }
 
 @override
 String toString() {
-    return 'ApiException.backend(message: $message, statusCode: $statusCode)';
+    return 'ApiException.backend(message: $message, statusCode: $statusCode, code: $code)';
 }
 
 
@@ -262,7 +263,7 @@ abstract mixin class $ApiExceptionBackendCopyWith<$Res> implements $ApiException
   factory $ApiExceptionBackendCopyWith(ApiExceptionBackend value, $Res Function(ApiExceptionBackend) _then) = _$ApiExceptionBackendCopyWithImpl;
 @override @useResult
 $Res call({
- String message, int? statusCode
+ String message, int? statusCode, String? code
 });
 
 
@@ -279,11 +280,12 @@ class _$ApiExceptionBackendCopyWithImpl<$Res>
 
 /// Create a copy of ApiException
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? message = null,Object? statusCode = freezed,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? message = null,Object? statusCode = freezed,Object? code = freezed,}) {
   return _then(ApiExceptionBackend(
 message: null == message ? _self.message : message // ignore: cast_nullable_to_non_nullable
 as String,statusCode: freezed == statusCode ? _self.statusCode : statusCode // ignore: cast_nullable_to_non_nullable
-as int?,
+as int?,code: freezed == code ? _self.code : code // ignore: cast_nullable_to_non_nullable
+as String?,
   ));
 }
 

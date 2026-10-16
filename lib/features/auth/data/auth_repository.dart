@@ -32,13 +32,6 @@ class AuthPasswordRecovery extends AuthChange {
 abstract class AuthRepository {
   Future<AuthUser> signIn({required String email, required String password});
 
-  Future<AuthUser> register({
-    required String name,
-    required String email,
-    required String phone,
-    required String password,
-  });
-
   Future<void> forgotPassword({required String email});
 
   Future<void> resetPassword({
@@ -97,26 +90,6 @@ class BackendAuthRepository implements AuthRepository {
       'password': password,
     });
     return _storeSession(body);
-  }
-
-  @override
-  Future<AuthUser> register({
-    required String name,
-    required String email,
-    required String phone,
-    required String password,
-  }) async {
-    final body = await _client.post('/auth/register', <String, dynamic>{
-      'name': name,
-      'email': email,
-      'phone': phone,
-      'password': password,
-    });
-    final token = _readAccessToken(body);
-    if (token != null) {
-      return _storeSession(body);
-    }
-    return signIn(email: email, password: password);
   }
 
   @override

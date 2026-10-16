@@ -62,7 +62,7 @@ String? authRedirect({
   return null;
 }
 
-/// After login/register: pending deep link if the role allows it, else dashboard.
+/// After login: pending deep link if the role allows it, else dashboard.
 String destinationAfterAuth({
   required String role,
   String? pendingDeepLink,

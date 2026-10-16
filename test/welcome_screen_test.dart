@@ -41,10 +41,6 @@ Future<void> _pumpAt(WidgetTester tester, Size size) async {
         path: AppRoutes.login,
         builder: (context, state) => const Scaffold(body: Text('login')),
       ),
-      GoRoute(
-        path: AppRoutes.register,
-        builder: (context, state) => const Scaffold(body: Text('register')),
-      ),
     ],
   );
   addTearDown(router.dispose);

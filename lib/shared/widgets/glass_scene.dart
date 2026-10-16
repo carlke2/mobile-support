@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/app_tokens.dart';
 
-/// Full-screen charcoal gradient with a blurred rainy-street scene.
+/// Full-screen navy gradient with a blurred rainy-street scene.
 ///
 /// Reuse this as the background for every later screen.
 class GlassScene extends StatelessWidget {

@@ -5,7 +5,6 @@ import '../../features/auth/application/auth_controller.dart';
 import '../../features/auth/domain/auth_destinations.dart';
 import '../../features/auth/presentation/forgot_password_screen.dart';
 import '../../features/auth/presentation/login_screen.dart';
-import '../../features/auth/presentation/register_screen.dart';
 import '../../features/auth/presentation/reset_password_screen.dart';
 import '../../features/auth/presentation/splash_screen.dart';
 import '../../features/auth/presentation/offline_screen.dart';
@@ -52,7 +51,6 @@ final routerProvider = Provider<GoRouter>((ref) {
         );
       }
 
-      // Wait one frame for first-launch flag when leaving splash.
       if (!firstLaunchResolved && auth is! AuthSignedIn) {
         return AppRoutes.splash;
       }
@@ -107,10 +105,6 @@ final routerProvider = Provider<GoRouter>((ref) {
         ),
       ),
       GoRoute(
-        path: AppRoutes.register,
-        builder: (context, state) => const RegisterScreen(),
-      ),
-      GoRoute(
         path: AppRoutes.forgotPassword,
         builder: (context, state) => const ForgotPasswordScreen(),
       ),
@@ -127,21 +121,21 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: AppRoutes.home,
-        pageBuilder: (context, state) => RootPage(
+        pageBuilder: (context, state) => NoTransitionPage(
           key: state.pageKey,
           child: const DashboardScreen(),
         ),
       ),
       GoRoute(
         path: AppRoutes.staff,
-        pageBuilder: (context, state) => RootPage(
+        pageBuilder: (context, state) => NoTransitionPage(
           key: state.pageKey,
           child: const DashboardScreen(),
         ),
       ),
       GoRoute(
         path: AppRoutes.admin,
-        pageBuilder: (context, state) => RootPage(
+        pageBuilder: (context, state) => NoTransitionPage(
           key: state.pageKey,
           child: const DashboardScreen(),
         ),

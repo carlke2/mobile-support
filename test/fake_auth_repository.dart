@@ -7,19 +7,14 @@ class FakeAuthRepository implements AuthRepository {
     this.user,
     this.restoreUser,
     this.signInError,
-    this.registerError,
   });
 
   AuthUser? user;
   AuthUser? restoreUser;
   ApiException? signInError;
-  ApiException? registerError;
   int signInCalls = 0;
-  int registerCalls = 0;
   int signOutCalls = 0;
   String? email;
-  String? name;
-  String? phone;
   String? password;
 
   @override
@@ -40,36 +35,6 @@ class FakeAuthRepository implements AuthRepository {
     }
     restoreUser = signedIn;
     return signedIn;
-  }
-
-  @override
-  Future<AuthUser> register({
-    required String name,
-    required String email,
-    required String phone,
-    required String password,
-  }) async {
-    registerCalls += 1;
-    this.name = name;
-    this.email = email;
-    this.phone = phone;
-    this.password = password;
-    final error = registerError;
-    if (error != null) {
-      throw error;
-    }
-    final created = user ??
-        AuthUser(
-          id: 'user-1',
-          name: name,
-          email: email,
-          phone: phone,
-          role: 'USER',
-          roles: const <String>['USER'],
-          activeRole: 'USER',
-        );
-    restoreUser = created;
-    return created;
   }
 
   @override

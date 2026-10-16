@@ -89,7 +89,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     final query = GoRouterState.of(context).uri.queryParameters;
-    final created = query['created'] == '1';
     final expired = query[AppRoutes.expiredQuery] == '1';
     return AuthScaffold(
       child: Column(
@@ -109,13 +108,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               AppRoutes.sessionExpiredMessage,
               key: Key('session-expired-message'),
               style: AppTypography.error,
-            ),
-            const SizedBox(height: AppSpacing.sm),
-          ],
-          if (created) ...[
-            const Text(
-              'Account created. Sign in to continue.',
-              style: AppTypography.body,
             ),
             const SizedBox(height: AppSpacing.sm),
           ],
@@ -184,10 +176,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             expand: true,
             loading: _submitting,
             onPressed: _submit,
-          ),
-          TextButton(
-            onPressed: () => context.push(AppRoutes.register),
-            child: const Text('Create account', style: AppTypography.label),
           ),
         ],
       ),

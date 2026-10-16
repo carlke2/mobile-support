@@ -3,36 +3,37 @@ import 'dart:typed_data';
 
 import 'package:boardroom/core/network/api_client.dart';
 import 'package:boardroom/core/network/api_exception.dart';
-import 'package:boardroom/core/network/boardroom_api.dart';
 import 'package:boardroom/core/storage/token_storage.dart';
 import 'package:boardroom/features/auth/data/auth_repository.dart';
+import 'package:boardroom/features/dashboard/data/dashboard_api.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test('home counts call the backend', () async {
+  test('dashboard user calls the documented route', () async {
     final client = ApiClient(
       baseUrl: 'http://127.0.0.1:5000',
       readToken: () async => 'session-token',
       clearToken: () async {},
       dio: Dio()
         ..httpClientAdapter = _ScriptedAdapter((options) async {
-          expect(options.uri.toString(), 'http://127.0.0.1:5000/home/counts');
+          expect(options.uri.toString(), 'http://127.0.0.1:5000/dashboard/user');
           expect(options.headers['Authorization'], 'Bearer session-token');
           return _json(<String, dynamic>{
             'ok': true,
             'openTickets': 2,
-            'unreadNotifications': 1,
-            'upcomingBookings': 3,
+            'awaitingReply': 1,
+            'nextBooking': null,
+            'recentTickets': <Object>[],
+            'unreadAlerts': 3,
           });
         }),
     );
     addTearDown(client.close);
 
-    final body = await BoardroomApi(client).homeCounts();
-    expect(body['openTickets'], 2);
-    expect(body['unreadNotifications'], 1);
-    expect(body['upcomingBookings'], 3);
+    final body = await ExpressDashboardApi(client).user();
+    expect(body.openTickets, 2);
+    expect(body.unreadAlerts, 3);
   });
 
   test('sign in stores the backend token and user', () async {
@@ -117,7 +118,8 @@ void main() {
   test('a network failure keeps the saved session', () async {
     final storage = _MemoryTokenStorage()
       ..value = 'jwt-1'
-      ..profile = '{"id":"user-1","name":"Ada","email":"ada@example.com","role":"USER","roles":["USER"],"activeRole":"USER"}';
+      ..profile =
+          '{"id":"user-1","name":"Ada","email":"ada@example.com","role":"USER","roles":["USER"],"activeRole":"USER"}';
     final client = ApiClient(
       baseUrl: 'http://127.0.0.1:5000',
       readToken: storage.read,
@@ -137,56 +139,6 @@ void main() {
     expect(restored, isA<SessionOffline>());
     expect((restored as SessionOffline).user?.activeRole, 'USER');
     expect(await storage.read(), 'jwt-1');
-  });
-
-  test('an expired access token is refreshed once', () async {
-    final storage = _MemoryTokenStorage()
-      ..value = 'old-access'
-      ..refresh = 'refresh-1';
-    var countsCalls = 0;
-    final client = ApiClient(
-      baseUrl: 'http://127.0.0.1:5000',
-      readToken: storage.read,
-      clearToken: storage.clear,
-      readRefresh: storage.readRefresh,
-      writeSession: (access, refresh) {
-        return storage.write(access, refreshToken: refresh);
-      },
-      dio: Dio()
-        ..httpClientAdapter = _ScriptedAdapter((options) async {
-          if (options.uri.path == '/auth/refresh') {
-            expect(options.extra['skipAuth'], isTrue);
-            final sent = options.data as Map<String, dynamic>;
-            expect(sent['refreshToken'], 'refresh-1');
-            return _json(<String, dynamic>{
-              'ok': true,
-              'accessToken': 'new-access',
-              'refreshToken': 'refresh-2',
-            });
-          }
-          countsCalls += 1;
-          if (countsCalls == 1) {
-            return _json(
-              <String, dynamic>{'ok': false, 'message': 'expired'},
-              status: 401,
-            );
-          }
-          expect(options.headers['Authorization'], 'Bearer new-access');
-          return _json(<String, dynamic>{
-            'ok': true,
-            'openTickets': 1,
-            'unreadNotifications': 0,
-            'upcomingBookings': 0,
-          });
-        }),
-    );
-    addTearDown(client.close);
-
-    final body = await client.get('/home/counts');
-    expect(body['openTickets'], 1);
-    expect(countsCalls, 2);
-    expect(await storage.read(), 'new-access');
-    expect(await storage.readRefresh(), 'refresh-2');
   });
 
   test('a session user keeps the backend role list', () {

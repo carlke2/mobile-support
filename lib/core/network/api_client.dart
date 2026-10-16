@@ -51,7 +51,8 @@ class ApiClient {
     this.sendTimeout = const Duration(seconds: 20),
     this.readRefresh,
     this.writeSession,
-    this.onUnauthorized,
+    this.onRefreshInvalid,
+    this.onTokenInvalid,
     required this.clearToken,
   }) : _dio = dio ?? Dio() {
     _dio.options
@@ -67,7 +68,8 @@ class ApiClient {
 
   final Dio _dio;
   final Future<void> Function() clearToken;
-  final Future<void> Function()? onUnauthorized;
+  final Future<void> Function()? onRefreshInvalid;
+  final Future<void> Function()? onTokenInvalid;
   final Future<String?> Function()? readRefresh;
   final Future<void> Function(String access, String refresh)? writeSession;
   final Duration receiveTimeout;
@@ -125,7 +127,14 @@ class ApiClient {
       );
       final status = response.statusCode;
       final hadBearer = response.requestOptions.extra['hadBearer'] == true;
-      if (status == 401 && hadBearer && allowRefresh) {
+      final decoded = _jsonBody(response.data, status);
+      final map = asJsonMap(decoded);
+      final code = map == null ? null : codeFromBody(map);
+
+      if (status == 401 &&
+          code == ApiErrorCode.tokenExpired &&
+          hadBearer &&
+          allowRefresh) {
         final outcome = await _tryRefresh();
         switch (outcome) {
           case _Refresh.ok:
@@ -144,10 +153,20 @@ class ApiClient {
             throw const ApiException.backend(
               message: 'Session expired, please sign in again',
               statusCode: 401,
+              code: ApiErrorCode.refreshInvalid,
             );
         }
       }
-      return _decode(status, response.data);
+
+      if (status != null && status >= 400) {
+        await _handleFailure(
+          status: status,
+          map: map,
+          code: code,
+          hadBearer: hadBearer,
+        );
+      }
+      return parseSuccessBody(decoded, statusCode: status);
     } on DioException catch (error) {
       if (_isTimeout(error.type)) {
         throw const ApiException.timeout(
@@ -160,7 +179,49 @@ class ApiClient {
     }
   }
 
-  /// One refresh for every caller that hit 401 together.
+  Future<void> _handleFailure({
+    required int status,
+    required Map<String, dynamic>? map,
+    required String? code,
+    required bool hadBearer,
+  }) async {
+    final message = map == null ? 'Request failed' : messageFromBody(map);
+
+    if (code == ApiErrorCode.refreshInvalid) {
+      await _rejectRefreshInvalid();
+      throw ApiException.backend(
+        message: 'Session expired, please sign in again',
+        statusCode: status,
+        code: code,
+      );
+    }
+
+    if (code == ApiErrorCode.tokenInvalid) {
+      await _rejectTokenInvalid();
+      throw ApiException.backend(
+        message: message,
+        statusCode: status,
+        code: code,
+      );
+    }
+
+    if (code == ApiErrorCode.tokenExpired && hadBearer) {
+      // Refresh already attempted or not allowed — do not sign out on 5xx path.
+      throw ApiException.backend(
+        message: message,
+        statusCode: status,
+        code: code,
+      );
+    }
+
+    // 5xx and other failures never clear the session.
+    throw ApiException.backend(
+      message: code == ApiErrorCode.forbidden ? 'Not allowed' : message,
+      statusCode: status,
+      code: code,
+    );
+  }
+
   Future<_Refresh> _tryRefresh() {
     final pending = _refreshing;
     if (pending != null) {
@@ -178,7 +239,7 @@ class ApiClient {
   Future<_Refresh> _refreshNow() async {
     final refresh = (await readRefresh?.call())?.trim() ?? '';
     if (refresh.isEmpty || writeSession == null) {
-      await _rejectSession();
+      await _rejectRefreshInvalid();
       return _Refresh.rejected;
     }
     try {
@@ -193,15 +254,25 @@ class ApiClient {
         ),
       );
       final status = response.statusCode;
-      if (status == 401 || status == 400) {
-        await _rejectSession();
+      final decoded = _jsonBody(response.data, status);
+      final map = asJsonMap(decoded);
+      final code = map == null ? null : codeFromBody(map);
+
+      if (status == 401 ||
+          status == 400 ||
+          code == ApiErrorCode.refreshInvalid) {
+        await _rejectRefreshInvalid();
         return _Refresh.rejected;
       }
-      final body = _decode(status, response.data);
+      if (status != null && status >= 400) {
+        // Refresh 5xx: keep session, treat as offline for the caller.
+        return _Refresh.offline;
+      }
+      final body = parseSuccessBody(decoded, statusCode: status);
       final access = body['accessToken']?.toString().trim() ?? '';
       final rotated = body['refreshToken']?.toString().trim() ?? '';
       if (access.isEmpty) {
-        await _rejectSession();
+        await _rejectRefreshInvalid();
         return _Refresh.rejected;
       }
       await writeSession!(access, rotated.isEmpty ? refresh : rotated);
@@ -213,26 +284,19 @@ class ApiClient {
     } on ApiExceptionTimeout {
       return _Refresh.offline;
     } on ApiException {
-      await _rejectSession();
+      await _rejectRefreshInvalid();
       return _Refresh.rejected;
     }
   }
 
-  Future<void> _rejectSession() async {
+  Future<void> _rejectRefreshInvalid() async {
     await clearToken();
-    await onUnauthorized?.call();
+    await onRefreshInvalid?.call();
   }
 
-  Map<String, dynamic> _decode(int? statusCode, Object? data) {
-    final decoded = _jsonBody(data, statusCode);
-    if (statusCode != null && statusCode >= 400) {
-      final map = asJsonMap(decoded);
-      throw ApiException.backend(
-        message: map == null ? 'Request failed' : messageFromBody(map),
-        statusCode: statusCode,
-      );
-    }
-    return parseSuccessBody(decoded, statusCode: statusCode);
+  Future<void> _rejectTokenInvalid() async {
+    await clearToken();
+    await onTokenInvalid?.call();
   }
 
   Object? _jsonBody(Object? data, int? statusCode) {
@@ -278,7 +342,12 @@ final apiClientProvider = Provider<ApiClient>((ref) {
     connectTimeout: config.connectTimeout,
     sendTimeout: config.sendTimeout,
     receiveTimeout: config.receiveTimeout,
-    onUnauthorized: hub.notify,
+    onRefreshInvalid: () async {
+      await hub.onRefreshInvalid?.call();
+    },
+    onTokenInvalid: () async {
+      await hub.onTokenInvalid?.call();
+    },
   );
   ref.onDispose(client.close);
   return client;

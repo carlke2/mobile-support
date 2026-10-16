@@ -114,10 +114,6 @@ Future<void> _pumpLogin(
         builder: (context, state) => const Scaffold(body: Text('welcome')),
       ),
       GoRoute(
-        path: AppRoutes.register,
-        builder: (context, state) => const Scaffold(body: Text('register')),
-      ),
-      GoRoute(
         path: AppRoutes.forgotPassword,
         builder: (context, state) => const Scaffold(body: Text('forgot')),
       ),

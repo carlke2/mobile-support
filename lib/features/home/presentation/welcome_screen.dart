@@ -54,22 +54,10 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                           ),
                         ),
                         const SizedBox(height: AppSpacing.md),
-                        Wrap(
-                          spacing: 10,
-                          runSpacing: 10,
-                          crossAxisAlignment: WrapCrossAlignment.center,
-                          children: [
-                            GlassButton(
-                              label: 'Sign in',
-                              variant: GlassButtonVariant.primary,
-                              onPressed: () => context.push(AppRoutes.login),
-                            ),
-                            GlassButton(
-                              label: 'Create account',
-                              variant: GlassButtonVariant.outlined,
-                              onPressed: () => context.push(AppRoutes.register),
-                            ),
-                          ],
+                        GlassButton(
+                          label: 'Sign in',
+                          variant: GlassButtonVariant.primary,
+                          onPressed: () => context.push(AppRoutes.login),
                         ),
                         const SizedBox(height: AppSpacing.md),
                         const _SupportRow(),

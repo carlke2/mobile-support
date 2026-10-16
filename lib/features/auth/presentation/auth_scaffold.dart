@@ -4,7 +4,7 @@ import '../../../core/theme/app_tokens.dart';
 import '../../../shared/widgets/glass_card.dart';
 import '../../../shared/widgets/glass_scene.dart';
 
-/// Shared glass column used by sign-in, register, and password screens.
+/// Shared glass column used by sign-in and password screens.
 class AuthScaffold extends StatelessWidget {
   const AuthScaffold({super.key, required this.child});
 

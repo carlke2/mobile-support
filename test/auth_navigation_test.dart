@@ -10,7 +10,7 @@ import 'package:boardroom/features/auth/data/auth_repository.dart';
 import 'package:boardroom/features/auth/domain/auth_destinations.dart';
 import 'package:boardroom/features/auth/presentation/login_screen.dart';
 import 'package:boardroom/features/auth/presentation/splash_screen.dart';
-import 'package:boardroom/features/home/application/home_counts.dart';
+import 'package:boardroom/features/dashboard/data/dashboard_cache.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -50,7 +50,6 @@ void main() {
   late void Function(FlutterErrorDetails)? previousOnError;
 
   setUp(() {
-    // Route replacement can dispose an ErrorScreen mid-frame; ignore that paint noise.
     previousOnError = FlutterError.onError;
     FlutterError.onError = (details) {
       final text = details.toString();
@@ -86,6 +85,7 @@ void main() {
       overrides: [
         appConfigProvider.overrideWithValue(config),
         tokenStorageProvider.overrideWithValue(MemoryTokenStorage()),
+        dashboardCacheProvider.overrideWithValue(MemoryDashboardCache()),
         launchPrefsProvider.overrideWithValue(
           _LaunchPrefsFake(firstLaunch: firstLaunch),
         ),
@@ -93,13 +93,6 @@ void main() {
           repository ?? FakeAuthRepository(),
         ),
         authControllerProvider.overrideWith(() => _SeededAuth(auth)),
-        homeCountsProvider.overrideWith(
-          (ref) async => const HomeCounts(
-            openTickets: 0,
-            unreadNotifications: 0,
-            upcomingBookings: 0,
-          ),
-        ),
       ],
     );
     addTearDown(container.dispose);
@@ -118,7 +111,9 @@ void main() {
         final path = state.uri.path;
         if ((current is AuthSignedOut || current is AuthExpired) &&
             AppRoutes.isPrivate(path)) {
-          container.read(pendingRouteProvider.notifier).capture(state.uri.toString());
+          container
+              .read(pendingRouteProvider.notifier)
+              .capture(state.uri.toString());
         }
         final redirect = authRedirect(
           auth: current,
@@ -154,10 +149,6 @@ void main() {
           ),
         ),
         GoRoute(
-          path: AppRoutes.register,
-          builder: (context, state) => const Scaffold(body: Text('register')),
-        ),
-        GoRoute(
           path: AppRoutes.forgotPassword,
           builder: (context, state) => const Scaffold(body: Text('forgot')),
         ),
@@ -176,7 +167,9 @@ void main() {
                   TextButton(
                     key: const Key('sign-out-button'),
                     onPressed: () async {
-                      await container.read(authControllerProvider.notifier).signOut();
+                      await container
+                          .read(authControllerProvider.notifier)
+                          .signOut();
                       if (context.mounted) {
                         context.go(AppRoutes.welcome);
                       }
@@ -231,7 +224,6 @@ void main() {
       for (final public in <String>[
         AppRoutes.login,
         AppRoutes.welcome,
-        AppRoutes.register,
       ]) {
         final app = await pumpNav(
           tester,
@@ -343,15 +335,9 @@ void main() {
       overrides: [
         appConfigProvider.overrideWithValue(config),
         tokenStorageProvider.overrideWithValue(tokens),
+        dashboardCacheProvider.overrideWithValue(MemoryDashboardCache()),
         launchPrefsProvider.overrideWithValue(_LaunchPrefsFake()),
         authRepositoryProvider.overrideWithValue(repository),
-        homeCountsProvider.overrideWith(
-          (ref) async => const HomeCounts(
-            openTickets: 1,
-            unreadNotifications: 0,
-            upcomingBookings: 0,
-          ),
-        ),
       ],
     );
     addTearDown(container.dispose);
@@ -396,10 +382,6 @@ void main() {
         GoRoute(
           path: AppRoutes.welcome,
           builder: (context, state) => const Scaffold(body: Text('welcome')),
-        ),
-        GoRoute(
-          path: AppRoutes.register,
-          builder: (context, state) => const Scaffold(body: Text('register')),
         ),
         GoRoute(
           path: AppRoutes.staff,
