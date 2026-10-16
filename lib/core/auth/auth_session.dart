@@ -1,6 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-/// Whether a Supabase Auth session is present.
+/// Whether an API session is present.
 ///
 /// [AuthSession.unauthenticated] is the signal the router listens for.
 /// The auth controller sets it after sign-out and when startup finds no session.

@@ -1,57 +1,38 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
-/// Bearer token and the cached signed-in profile.
-///
-/// Pass [memory] in tests. Production uses [FlutterSecureStorage].
-class TokenStorage {
-  TokenStorage({FlutterSecureStorage? storage, Map<String, String>? memory})
-    : _memory = memory,
-      _storage = memory == null
-          ? (storage ?? const FlutterSecureStorage())
-          : null;
+/// Access token issued by the Express API. The app never stores a database key.
+abstract class TokenStorage {
+  Future<String?> read();
 
-  static const tokenKey = 'auth_token';
-  static const userKey = 'auth_user';
+  Future<void> write(String token);
 
-  final FlutterSecureStorage? _storage;
-  final Map<String, String>? _memory;
+  Future<void> clear();
+}
 
-  Future<String?> readToken() => _read(tokenKey);
+class SharedPrefsTokenStorage implements TokenStorage {
+  static const _key = 'boardroom_token';
 
-  Future<void> writeToken(String token) => _write(tokenKey, token);
+  @override
+  Future<String?> read() async {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString(_key)?.trim() ?? '';
+    return token.isEmpty ? null : token;
+  }
 
-  Future<String?> readUser() => _read(userKey);
+  @override
+  Future<void> write(String token) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_key, token);
+  }
 
-  Future<void> writeUser(String json) => _write(userKey, json);
-
+  @override
   Future<void> clear() async {
-    final memory = _memory;
-    if (memory != null) {
-      memory.remove(tokenKey);
-      memory.remove(userKey);
-      return;
-    }
-    await _storage!.delete(key: tokenKey);
-    await _storage.delete(key: userKey);
-  }
-
-  Future<String?> _read(String key) async {
-    final memory = _memory;
-    if (memory != null) {
-      return memory[key];
-    }
-    return _storage!.read(key: key);
-  }
-
-  Future<void> _write(String key, String value) async {
-    final memory = _memory;
-    if (memory != null) {
-      memory[key] = value;
-      return;
-    }
-    await _storage!.write(key: key, value: value);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_key);
   }
 }
 
-final tokenStorageProvider = Provider<TokenStorage>((ref) => TokenStorage());
+final tokenStorageProvider = Provider<TokenStorage>((ref) {
+  return SharedPrefsTokenStorage();
+});

@@ -1,11 +1,10 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:supabase_flutter/supabase_flutter.dart' hide AuthUser;
+import 'dart:async';
 
-import '../../../core/config/app_config.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../../core/network/api_client.dart';
 import '../../../core/network/api_exception.dart';
-import '../../../core/supabase/boardroom_api.dart';
-import '../../../core/supabase/supabase_client.dart';
-import '../../../core/supabase/supabase_errors.dart';
+import '../../../core/storage/token_storage.dart';
 import '../domain/auth_user.dart';
 
 /// Session events the auth controller applies to the router.
@@ -41,7 +40,10 @@ abstract class AuthRepository {
 
   Future<void> forgotPassword({required String email});
 
-  Future<void> resetPassword({required String newPassword});
+  Future<void> resetPassword({
+    required String token,
+    required String newPassword,
+  });
 
   Future<void> signOut();
 
@@ -50,32 +52,40 @@ abstract class AuthRepository {
   Stream<AuthChange> watch();
 }
 
-class SupabaseAuthRepository implements AuthRepository {
-  SupabaseAuthRepository(this._client, {required this.redirectTo})
-    : _api = BoardroomApi.fromClient(_client);
+class BackendAuthRepository implements AuthRepository {
+  BackendAuthRepository(this._client, this._tokens);
 
-  final SupabaseClient _client;
-  final BoardroomApi _api;
-  final String redirectTo;
+  final ApiClient _client;
+  final TokenStorage _tokens;
+  final StreamController<AuthChange> _changes =
+      StreamController<AuthChange>.broadcast();
 
   @override
   Future<AuthUser> signIn({
     required String email,
     required String password,
   }) async {
-    try {
-      final response = await _client.auth.signInWithPassword(
-        email: email,
-        password: password,
-      );
-      final userId = response.user?.id ?? response.session?.user.id;
-      if (userId == null) {
+    final body = await _client.post('/auth/login', <String, dynamic>{
+      'email': email,
+      'password': password,
+    });
+    if (body['requiresRoleSelection'] == true) {
+      final pending = body['pendingToken']?.toString() ?? '';
+      final roles = body['roles'];
+      final role = roles is List && roles.isNotEmpty
+          ? roles.first.toString()
+          : '';
+      if (pending.isEmpty || role.isEmpty) {
         throw const ApiException.backend(message: 'Sign in failed.');
       }
-      return await _profileFor(userId);
-    } on AuthException catch (error) {
-      throw mapAuthException(error);
+      final session = await _client.post(
+        '/auth/select-role',
+        <String, dynamic>{'role': role},
+        token: pending,
+      );
+      return _storeSession(session);
     }
+    return _storeSession(body);
   }
 
   @override
@@ -85,129 +95,102 @@ class SupabaseAuthRepository implements AuthRepository {
     required String phone,
     required String password,
   }) async {
-    try {
-      final response = await _client.auth.signUp(
-        email: email,
-        password: password,
-        data: <String, dynamic>{'name': name, 'phone': phone},
-      );
-      if (response.session == null) {
-        return;
-      }
-      try {
-        await _api.updateMyProfile(name: name, phone: phone);
-      } finally {
-        try {
-          await _client.auth.signOut();
-        } on AuthException {
-          // The account row exists. A failed sign-out must not hide that.
-        }
-      }
-    } on AuthException catch (error) {
-      throw mapAuthException(error);
-    }
+    await _client.post('/auth/register', <String, dynamic>{
+      'name': name,
+      'email': email,
+      'phone': phone,
+      'password': password,
+    });
   }
 
   @override
   Future<void> forgotPassword({required String email}) async {
-    try {
-      await _client.auth.resetPasswordForEmail(email, redirectTo: redirectTo);
-    } on AuthException catch (error) {
-      throw mapAuthException(error);
-    }
+    await _client.post('/auth/forgot-password', <String, dynamic>{
+      'email': email,
+    });
   }
 
   @override
-  Future<void> resetPassword({required String newPassword}) async {
-    try {
-      await _client.auth.updateUser(UserAttributes(password: newPassword));
-      await _client.auth.signOut();
-    } on AuthException catch (error) {
-      throw mapAuthException(error);
+  Future<void> resetPassword({
+    required String token,
+    required String newPassword,
+  }) async {
+    final trimmed = token.trim();
+    if (trimmed.isEmpty) {
+      throw const ApiException.backend(
+        message: 'Open the reset link from your email.',
+      );
     }
+    await _client.post('/auth/reset-password', <String, dynamic>{
+      'token': trimmed,
+      'newPassword': newPassword,
+    });
+    await _tokens.clear();
   }
 
   @override
   Future<void> signOut() async {
-    try {
-      await _client.auth.signOut();
-    } on AuthException catch (error) {
-      throw mapAuthException(error);
+    await _tokens.clear();
+    if (!_changes.isClosed) {
+      _changes.add(const AuthSignedOut());
     }
   }
 
   @override
   Future<AuthUser?> restore() async {
-    final userId = _client.auth.currentUser?.id;
-    if (userId == null) {
+    final token = await _tokens.read();
+    if (token == null) {
       return null;
     }
-    return _profileFor(userId);
+    try {
+      final body = await _client.get('/auth/me');
+      final user = body['user'];
+      if (user is! Map) {
+        await _tokens.clear();
+        return null;
+      }
+      return authUserFromSession(Map<String, dynamic>.from(user));
+    } on ApiException catch (error) {
+      if (error is ApiExceptionBackend && error.statusCode == 401) {
+        await _tokens.clear();
+        return null;
+      }
+      rethrow;
+    }
   }
 
   @override
-  Stream<AuthChange> watch() {
-    return _client.auth.onAuthStateChange.map((state) {
-      switch (state.event) {
-        case AuthChangeEvent.passwordRecovery:
-          return const AuthPasswordRecovery();
-        case AuthChangeEvent.signedOut:
-          return const AuthSignedOut();
-        case AuthChangeEvent.signedIn:
-          return const AuthSignedIn();
-        case AuthChangeEvent.initialSession:
-        case AuthChangeEvent.tokenRefreshed:
-        case AuthChangeEvent.userUpdated:
-        case AuthChangeEvent.mfaChallengeVerified:
-        case _:
-          return const AuthIgnored();
-      }
-    });
-  }
+  Stream<AuthChange> watch() => _changes.stream;
 
-  Future<AuthUser> _profileFor(String userId) async {
-    var row = await _api.ownProfile(userId);
-    final metadata = _client.auth.currentUser?.userMetadata?['phone'];
-    final signupPhone = metadata?.toString().trim() ?? '';
-    final storedPhone = row['phone']?.toString().trim() ?? '';
-    if (storedPhone.isEmpty && signupPhone.isNotEmpty) {
-      row = await _api.updateMyProfile(
-        name: (row['name'] ?? '').toString(),
-        phone: signupPhone,
-      );
+  Future<AuthUser> _storeSession(Map<String, dynamic> body) async {
+    final token = body['token']?.toString().trim() ?? '';
+    final user = body['user'];
+    if (token.isEmpty || user is! Map) {
+      throw const ApiException.backend(message: 'Sign in failed.');
     }
-    return authUserFromProfileRow(
-      row,
-      emailFallback: _client.auth.currentUser?.email,
-      roleOverride: jwtUserRole(_client.auth.currentSession?.accessToken),
-    );
+    await _tokens.write(token);
+    return authUserFromSession(Map<String, dynamic>.from(user));
   }
 }
 
-/// Profile row from `profiles` select `id,name,email,phone,role`.
-AuthUser authUserFromProfileRow(
-  Map<String, dynamic> row, {
-  String? emailFallback,
-  String? roleOverride,
-}) {
-  final claimed = roleOverride?.trim() ?? '';
-  final role = claimed.isNotEmpty ? claimed : (row['role'] ?? 'USER').toString();
-  final emailValue = row['email'] ?? emailFallback ?? '';
+/// Profile from `POST /auth/login` or `GET /auth/me`.
+AuthUser authUserFromSession(Map<String, dynamic> row) {
+  final role = (row['role'] ?? 'USER').toString();
+  final emailValue = row['email'] ?? '';
   return AuthUser.fromJson(<String, dynamic>{
-    'id': row['id'] ?? '',
+    'id': row['id'] ?? row['_id'] ?? '',
     'name': row['name'] ?? '',
     'email': emailValue,
     'phone': row['phone'],
     'role': role,
-    'roles': <String>[role],
-    'activeRole': role,
+    'roles': row['roles'] ?? <String>[role],
+    'activeRole': row['activeRole'] ?? role,
   });
 }
 
 final authRepositoryProvider = Provider<AuthRepository>((ref) {
-  final config = ref.watch(appConfigProvider);
-  return SupabaseAuthRepository(
-    ref.watch(supabaseClientProvider),
-    redirectTo: config.authRedirectUrl,
+  return BackendAuthRepository(
+    ref.watch(apiClientProvider),
+    ref.watch(tokenStorageProvider),
   );
 });

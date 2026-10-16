@@ -3,7 +3,7 @@ import 'package:freezed_annotation/freezed_annotation.dart';
 part 'auth_user.freezed.dart';
 part 'auth_user.g.dart';
 
-/// Signed-in profile loaded from `profiles` after Supabase Auth sign-in.
+/// Signed-in profile returned by the Express API.
 @freezed
 abstract class AuthUser with _$AuthUser {
   const factory AuthUser({

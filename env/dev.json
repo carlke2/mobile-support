@@ -1,6 +1,3 @@
 {
-  "SUPABASE_URL": "http://127.0.0.1:54321",
-  "SUPABASE_ANON_KEY": "",
-  "AUTH_REDIRECT_URL": "boardroom://reset-password",
   "API_BASE_URL": "http://127.0.0.1:5000"
 }

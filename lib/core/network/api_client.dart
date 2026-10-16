@@ -1,80 +1,121 @@
-import 'package:dio/dio.dart';
+import 'dart:async';
+import 'dart:convert';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:http/http.dart' as http;
 
 import '../config/app_config.dart';
 import '../storage/token_storage.dart';
 import 'api_exception.dart';
-import 'auth_interceptor.dart';
 
-/// Single Dio client for the Boardroom REST API.
+/// HTTP client for the Express API. Every call goes to [AppConfig.apiBaseUrl].
 class ApiClient {
   ApiClient({
-    required AppConfig config,
-    required TokenStorage tokenStorage,
-    required void Function() onUnauthenticated,
-    Dio? dio,
-  }) : _dio =
-           dio ??
-           Dio(
-             BaseOptions(
-               baseUrl: config.apiBaseUrl,
-               connectTimeout: config.connectTimeout,
-               sendTimeout: config.sendTimeout,
-               receiveTimeout: config.receiveTimeout,
-               contentType: Headers.jsonContentType,
-               responseType: ResponseType.json,
-               headers: <String, String>{
-                 Headers.acceptHeader: Headers.jsonContentType,
-               },
-             ),
-           ) {
-    _dio.interceptors.add(
-      AuthInterceptor(
-        tokenStorage: tokenStorage,
-        onUnauthenticated: onUnauthenticated,
-      ),
-    );
+    required this.baseUrl,
+    required this.readToken,
+    http.Client? httpClient,
+    this.receiveTimeout = const Duration(seconds: 20),
+  }) : _http = httpClient ?? http.Client();
+
+  final String baseUrl;
+  final Future<String?> Function() readToken;
+  final Duration receiveTimeout;
+  final http.Client _http;
+
+  void close() => _http.close();
+
+  Future<Map<String, dynamic>> get(String path, {String? token}) {
+    return _send('GET', path, token: token);
   }
 
-  final Dio _dio;
-
-  Future<Map<String, dynamic>> getJson(String path) async {
-    try {
-      final response = await _dio.get<dynamic>(path);
-      return parseSuccessBody(response.data, statusCode: response.statusCode);
-    } on DioException catch (error) {
-      throw mapDioException(error);
-    }
-  }
-
-  Future<Map<String, dynamic>> postJson(
+  Future<Map<String, dynamic>> post(
     String path,
     Map<String, dynamic> body, {
-    Map<String, String>? headers,
-  }) async {
-    try {
-      final response = await _dio.post<dynamic>(
-        path,
-        data: body,
-        options: headers == null ? null : Options(headers: headers),
-      );
-      return parseSuccessBody(response.data, statusCode: response.statusCode);
-    } on DioException catch (error) {
-      throw mapDioException(error);
-    }
+    String? token,
+  }) {
+    return _send('POST', path, body: body, token: token);
   }
 
-  void dispose() {
-    _dio.close(force: true);
+  Future<Map<String, dynamic>> patch(
+    String path,
+    Map<String, dynamic> body, {
+    String? token,
+  }) {
+    return _send('PATCH', path, body: body, token: token);
+  }
+
+  Future<Map<String, dynamic>> delete(String path, {String? token}) {
+    return _send('DELETE', path, token: token);
+  }
+
+  Future<Map<String, dynamic>> _send(
+    String method,
+    String path, {
+    Map<String, dynamic>? body,
+    String? token,
+  }) async {
+    final uri = Uri.parse('$baseUrl$path');
+    final headers = <String, String>{'Accept': 'application/json'};
+    final auth = token ?? await readToken();
+    if (auth != null && auth.isNotEmpty) {
+      headers['Authorization'] = 'Bearer $auth';
+    }
+    if (body != null) {
+      headers['Content-Type'] = 'application/json';
+    }
+
+    final request = http.Request(method, uri)..headers.addAll(headers);
+    if (body != null) {
+      request.body = jsonEncode(body);
+    }
+
+    late http.StreamedResponse streamed;
+    try {
+      streamed = await _http.send(request).timeout(receiveTimeout);
+    } on TimeoutException {
+      throw const ApiException.timeout(
+        message: 'The server took too long to respond.',
+      );
+    } on http.ClientException {
+      throw const ApiException.network(message: 'Unable to reach the server.');
+    } on Object {
+      throw const ApiException.network(message: 'Unable to reach the server.');
+    }
+
+    final text = await streamed.stream.bytesToString();
+    Object? decoded;
+    if (text.trim().isEmpty) {
+      decoded = <String, dynamic>{};
+    } else {
+      try {
+        decoded = jsonDecode(text);
+      } on Object {
+        throw ApiException.unknown(
+          message: 'Expected a JSON object.',
+          statusCode: streamed.statusCode,
+        );
+      }
+    }
+
+    if (streamed.statusCode >= 400) {
+      final map = asJsonMap(decoded);
+      throw ApiException.backend(
+        message: map == null ? 'Request failed' : messageFromBody(map),
+        statusCode: streamed.statusCode,
+      );
+    }
+    return parseSuccessBody(decoded, statusCode: streamed.statusCode);
   }
 }
 
 final apiClientProvider = Provider<ApiClient>((ref) {
+  final config = ref.watch(appConfigProvider);
+  final storage = ref.watch(tokenStorageProvider);
   final client = ApiClient(
-    config: ref.watch(appConfigProvider),
-    tokenStorage: ref.watch(tokenStorageProvider),
-    onUnauthenticated: () {},
+    baseUrl: config.apiBaseUrl,
+    readToken: storage.read,
+    receiveTimeout: config.receiveTimeout,
   );
-  ref.onDispose(client.dispose);
+  ref.onDispose(client.close);
   return client;
 });

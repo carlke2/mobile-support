@@ -52,7 +52,7 @@ Future<void> _pumpAt(WidgetTester tester, Size size) async {
     ProviderScope(
       overrides: [
         appConfigProvider.overrideWithValue(
-          const AppConfig(apiBaseUrl: 'http://localhost'),
+          const AppConfig(apiBaseUrl: 'http://127.0.0.1:5000'),
         ),
       ],
       child: MaterialApp.router(

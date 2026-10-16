@@ -50,9 +50,14 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
     }
     setState(() => _submitting = true);
     try {
+      final token =
+          GoRouterState.of(context).uri.queryParameters['token'] ?? '';
       await ref
           .read(authControllerProvider.notifier)
-          .resetPassword(newPassword: _passwordController.text);
+          .resetPassword(
+            token: token,
+            newPassword: _passwordController.text,
+          );
       if (!mounted) {
         return;
       }

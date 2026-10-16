@@ -76,10 +76,13 @@ class AuthController extends AsyncNotifier<AuthUser?> {
     return ref.read(authRepositoryProvider).forgotPassword(email: email);
   }
 
-  Future<void> resetPassword({required String newPassword}) async {
+  Future<void> resetPassword({
+    required String token,
+    required String newPassword,
+  }) async {
     await ref
         .read(authRepositoryProvider)
-        .resetPassword(newPassword: newPassword);
+        .resetPassword(token: token, newPassword: newPassword);
     _clear();
   }
 
