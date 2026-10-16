@@ -69,22 +69,6 @@ class BackendAuthRepository implements AuthRepository {
       'email': email,
       'password': password,
     });
-    if (body['requiresRoleSelection'] == true) {
-      final pending = body['pendingToken']?.toString() ?? '';
-      final roles = body['roles'];
-      final role = roles is List && roles.isNotEmpty
-          ? roles.first.toString()
-          : '';
-      if (pending.isEmpty || role.isEmpty) {
-        throw const ApiException.backend(message: 'Sign in failed.');
-      }
-      final session = await _client.post(
-        '/auth/select-role',
-        <String, dynamic>{'role': role},
-        token: pending,
-      );
-      return _storeSession(session);
-    }
     return _storeSession(body);
   }
 
