@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/network/api_exception.dart';
+import '../../../core/router/app_routes.dart';
 import '../../../core/theme/app_tokens.dart';
 import '../../../shared/widgets/app_logo.dart';
 import '../../../shared/widgets/glass_button.dart';
@@ -123,7 +124,7 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
             ),
           ],
           TextButton(
-            onPressed: () => context.go('/login'),
+            onPressed: () => context.go(AppRoutes.login),
             child: const Text('Sign in', style: AppTypography.label),
           ),
         ],

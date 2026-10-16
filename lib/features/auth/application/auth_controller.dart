@@ -1,16 +1,31 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/auth/auth_session.dart';
+import '../../../core/auth/auth_state.dart';
 import '../../../core/auth/password_recovery.dart';
+import '../../../core/network/unauthorized_hub.dart';
+import '../../home/application/home_counts.dart';
 import '../data/auth_repository.dart';
 import '../domain/auth_user.dart';
 
-/// Session owner. [AsyncData] of null means signed out.
-class AuthController extends AsyncNotifier<AuthUser?> {
+/// Owns the four auth states and session lifecycle.
+class AuthController extends Notifier<AuthState> {
   bool _holdSession = false;
+  var _restoreStarted = false;
 
   @override
-  Future<AuthUser?> build() async {
+  AuthState build() {
+    final hub = ref.read(unauthorizedHubProvider);
+    hub.handler = expireSession;
+    ref.onDispose(() {
+      if (identical(hub.handler, expireSession)) {
+        hub.handler = null;
+      }
+    });
+    if (!_restoreStarted) {
+      _restoreStarted = true;
+      Future<void>(() => _restore());
+    }
     final repository = ref.read(authRepositoryProvider);
     final subscription = repository.watch().listen((change) {
       if (_holdSession) {
@@ -24,18 +39,34 @@ class AuthController extends AsyncNotifier<AuthUser?> {
       });
     }, onError: (Object _) {});
     ref.onDispose(subscription.cancel);
+    return const AuthUnknown();
+  }
 
+  AuthUser? get user {
+    final current = state;
+    return current is AuthSignedIn ? current.user : null;
+  }
+
+  Future<void> _restore() async {
     if (pendingPasswordRecovery) {
       ref.read(passwordRecoveryProvider.notifier).begin();
     }
-
-    final user = await repository.restore();
-    if (user == null) {
-      ref.read(authSessionProvider.notifier).markUnauthenticated();
-      return null;
+    try {
+      final restored = await ref.read(authRepositoryProvider).restore();
+      if (!ref.mounted) {
+        return;
+      }
+      if (restored == null) {
+        state = const AuthSignedOut();
+        return;
+      }
+      state = AuthSignedIn(role: restored.activeRole, user: restored);
+    } on Object {
+      if (!ref.mounted) {
+        return;
+      }
+      state = const AuthSignedOut();
     }
-    ref.read(authSessionProvider.notifier).markAuthenticated();
-    return user;
   }
 
   Future<AuthUser> signIn({
@@ -44,18 +75,17 @@ class AuthController extends AsyncNotifier<AuthUser?> {
   }) async {
     _holdSession = true;
     try {
-      final user = await ref
+      final signedIn = await ref
           .read(authRepositoryProvider)
           .signIn(email: email, password: password);
-      ref.read(authSessionProvider.notifier).markAuthenticated();
-      state = AsyncData<AuthUser?>(user);
-      return user;
+      state = AuthSignedIn(role: signedIn.activeRole, user: signedIn);
+      return signedIn;
     } finally {
       _holdSession = false;
     }
   }
 
-  Future<void> register({
+  Future<AuthUser> register({
     required String name,
     required String email,
     required String phone,
@@ -63,12 +93,16 @@ class AuthController extends AsyncNotifier<AuthUser?> {
   }) async {
     _holdSession = true;
     try {
-      await ref
-          .read(authRepositoryProvider)
-          .register(name: name, email: email, phone: phone, password: password);
+      final registered = await ref.read(authRepositoryProvider).register(
+            name: name,
+            email: email,
+            phone: phone,
+            password: password,
+          );
+      state = AuthSignedIn(role: registered.activeRole, user: registered);
+      return registered;
     } finally {
       _holdSession = false;
-      _clear();
     }
   }
 
@@ -83,12 +117,52 @@ class AuthController extends AsyncNotifier<AuthUser?> {
     await ref
         .read(authRepositoryProvider)
         .resetPassword(token: token, newPassword: newPassword);
-    _clear();
+    _clearSignedOut();
   }
 
   Future<void> signOut() async {
     await ref.read(authRepositoryProvider).signOut();
-    _clear();
+    _invalidateUserScoped();
+    _clearSignedOut();
+  }
+
+  /// Called when ApiClient receives a 401 with a bearer token.
+  Future<void> expireSession() async {
+    if (state is AuthExpired) {
+      return;
+    }
+    await ref.read(authRepositoryProvider).signOut();
+    _invalidateUserScoped();
+    if (!ref.mounted) {
+      return;
+    }
+    ref.read(passwordRecoveryProvider.notifier).clear();
+    state = const AuthExpired();
+  }
+
+  /// Test / cold-start helper: force a signed-in state without network.
+  @visibleForTesting
+  void debugSetSignedIn(AuthUser user) {
+    state = AuthSignedIn(role: user.activeRole, user: user);
+  }
+
+  @visibleForTesting
+  void debugSetSignedOut() {
+    state = const AuthSignedOut();
+  }
+
+  @visibleForTesting
+  void debugSetExpired() {
+    state = const AuthExpired();
+  }
+
+  @visibleForTesting
+  void debugSetUnknown() {
+    state = const AuthUnknown();
+  }
+
+  void _invalidateUserScoped() {
+    ref.invalidate(homeCountsProvider);
   }
 
   Future<void> _onChange(AuthChange change) async {
@@ -97,37 +171,84 @@ class AuthController extends AsyncNotifier<AuthUser?> {
         return;
       case AuthPasswordRecovery():
         ref.read(passwordRecoveryProvider.notifier).begin();
-      case AuthSignedIn():
+      case AuthChangeSignedIn():
         await _adoptRestoredSession();
-      case AuthSignedOut():
-        _clear();
+      case AuthChangeSignedOut():
+        _clearSignedOut();
     }
   }
 
   Future<void> _adoptRestoredSession() async {
-    final user = await ref.read(authRepositoryProvider).restore();
+    final restored = await ref.read(authRepositoryProvider).restore();
     if (!ref.mounted) {
       return;
     }
-    if (user == null) {
-      _clear();
+    if (restored == null) {
+      _clearSignedOut();
       return;
     }
-    ref.read(authSessionProvider.notifier).markAuthenticated();
-    state = AsyncData<AuthUser?>(user);
+    state = AuthSignedIn(role: restored.activeRole, user: restored);
   }
 
-  void _clear() {
+  void _clearSignedOut() {
     if (!ref.mounted) {
       pendingPasswordRecovery = false;
       return;
     }
     ref.read(passwordRecoveryProvider.notifier).clear();
-    ref.read(authSessionProvider.notifier).markUnauthenticated();
-    state = const AsyncData<AuthUser?>(null);
+    state = const AuthSignedOut();
   }
 }
 
-final authControllerProvider = AsyncNotifierProvider<AuthController, AuthUser?>(
-  AuthController.new,
-);
+final authControllerProvider =
+    NotifierProvider<AuthController, AuthState>(AuthController.new);
+
+/// Listenable bridge so go_router re-runs redirects on every auth change.
+class AuthStateListenable extends ChangeNotifier {
+  AuthStateListenable.ref(Ref ref) {
+    _subscription = ref.listen<AuthState>(authControllerProvider, (
+      previous,
+      next,
+    ) {
+      refresh();
+    });
+    _recovery = ref.listen<bool>(passwordRecoveryProvider, (previous, next) {
+      refresh();
+    });
+  }
+
+  AuthStateListenable.container(ProviderContainer container) {
+    _subscription = container.listen<AuthState>(authControllerProvider, (
+      previous,
+      next,
+    ) {
+      refresh();
+    });
+    _recovery = container.listen<bool>(passwordRecoveryProvider, (
+      previous,
+      next,
+    ) {
+      refresh();
+    });
+  }
+
+  late final ProviderSubscription<AuthState> _subscription;
+  late final ProviderSubscription<bool> _recovery;
+
+  var _disposed = false;
+
+  void refresh() {
+    if (_disposed) {
+      return;
+    }
+    notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _disposed = true;
+    _subscription.close();
+    _recovery.close();
+    super.dispose();
+  }
+}

@@ -16,12 +16,12 @@ class AuthIgnored extends AuthChange {
   const AuthIgnored();
 }
 
-class AuthSignedIn extends AuthChange {
-  const AuthSignedIn();
+class AuthChangeSignedIn extends AuthChange {
+  const AuthChangeSignedIn();
 }
 
-class AuthSignedOut extends AuthChange {
-  const AuthSignedOut();
+class AuthChangeSignedOut extends AuthChange {
+  const AuthChangeSignedOut();
 }
 
 class AuthPasswordRecovery extends AuthChange {
@@ -31,7 +31,7 @@ class AuthPasswordRecovery extends AuthChange {
 abstract class AuthRepository {
   Future<AuthUser> signIn({required String email, required String password});
 
-  Future<void> register({
+  Future<AuthUser> register({
     required String name,
     required String email,
     required String phone,
@@ -89,18 +89,23 @@ class BackendAuthRepository implements AuthRepository {
   }
 
   @override
-  Future<void> register({
+  Future<AuthUser> register({
     required String name,
     required String email,
     required String phone,
     required String password,
   }) async {
-    await _client.post('/auth/register', <String, dynamic>{
+    final body = await _client.post('/auth/register', <String, dynamic>{
       'name': name,
       'email': email,
       'phone': phone,
       'password': password,
     });
+    final token = _readAccessToken(body);
+    if (token != null) {
+      return _storeSession(body);
+    }
+    return signIn(email: email, password: password);
   }
 
   @override
@@ -122,8 +127,8 @@ class BackendAuthRepository implements AuthRepository {
       );
     }
     await _client.post('/auth/reset-password', <String, dynamic>{
-      'token': trimmed,
-      'newPassword': newPassword,
+      'accessToken': trimmed,
+      'password': newPassword,
     });
     await _tokens.clear();
   }
@@ -132,7 +137,7 @@ class BackendAuthRepository implements AuthRepository {
   Future<void> signOut() async {
     await _tokens.clear();
     if (!_changes.isClosed) {
-      _changes.add(const AuthSignedOut());
+      _changes.add(const AuthChangeSignedOut());
     }
   }
 
@@ -163,13 +168,22 @@ class BackendAuthRepository implements AuthRepository {
   Stream<AuthChange> watch() => _changes.stream;
 
   Future<AuthUser> _storeSession(Map<String, dynamic> body) async {
-    final token = body['token']?.toString().trim() ?? '';
+    final token = _readAccessToken(body);
     final user = body['user'];
-    if (token.isEmpty || user is! Map) {
+    if (token == null || user is! Map) {
       throw const ApiException.backend(message: 'Sign in failed.');
     }
     await _tokens.write(token);
     return authUserFromSession(Map<String, dynamic>.from(user));
+  }
+
+  String? _readAccessToken(Map<String, dynamic> body) {
+    final access = body['accessToken']?.toString().trim() ?? '';
+    if (access.isNotEmpty) {
+      return access;
+    }
+    final legacy = body['token']?.toString().trim() ?? '';
+    return legacy.isEmpty ? null : legacy;
   }
 }
 

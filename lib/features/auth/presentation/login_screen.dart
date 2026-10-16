@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/auth/pending_route.dart';
 import '../../../core/network/api_exception.dart';
+import '../../../core/router/app_routes.dart';
 import '../../../core/theme/app_tokens.dart';
 import '../../../shared/widgets/app_logo.dart';
 import '../../../shared/widgets/glass_button.dart';
@@ -62,7 +64,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       if (!mounted) {
         return;
       }
-      context.go(homeForRole(user.activeRole));
+      final pending = ref.read(pendingRouteProvider);
+      ref.read(pendingRouteProvider.notifier).clear();
+      context.go(
+        destinationAfterAuth(role: user.activeRole, pendingDeepLink: pending),
+      );
     } on ApiException catch (error) {
       if (!mounted) {
         return;
@@ -82,8 +88,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final created =
-        GoRouterState.of(context).uri.queryParameters['created'] == '1';
+    final query = GoRouterState.of(context).uri.queryParameters;
+    final created = query['created'] == '1';
+    final expired = query[AppRoutes.expiredQuery] == '1';
     return AuthScaffold(
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -97,6 +104,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: AppSpacing.md),
+          if (expired) ...[
+            const Text(
+              AppRoutes.sessionExpiredMessage,
+              key: Key('session-expired-message'),
+              style: AppTypography.error,
+            ),
+            const SizedBox(height: AppSpacing.sm),
+          ],
           if (created) ...[
             const Text(
               'Account created. Sign in to continue.',
@@ -151,7 +166,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           Align(
             alignment: Alignment.centerLeft,
             child: TextButton(
-              onPressed: () => context.push('/forgot-password'),
+              onPressed: () => context.push(AppRoutes.forgotPassword),
               child: const Text(
                 'Forgot password?',
                 style: AppTypography.caption,
@@ -171,7 +186,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             onPressed: _submit,
           ),
           TextButton(
-            onPressed: () => context.push('/register'),
+            onPressed: () => context.push(AppRoutes.register),
             child: const Text('Create account', style: AppTypography.label),
           ),
         ],

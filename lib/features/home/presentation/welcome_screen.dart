@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/config/app_config.dart';
+import '../../../core/router/app_routes.dart';
 import '../../../core/theme/app_tokens.dart';
 import '../../../shared/widgets/app_logo.dart';
 import '../../../shared/widgets/glass_button.dart';
@@ -61,12 +62,12 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                             GlassButton(
                               label: 'Sign in',
                               variant: GlassButtonVariant.primary,
-                              onPressed: () => context.push('/login'),
+                              onPressed: () => context.push(AppRoutes.login),
                             ),
                             GlassButton(
                               label: 'Create account',
                               variant: GlassButtonVariant.outlined,
-                              onPressed: () => context.push('/register'),
+                              onPressed: () => context.push(AppRoutes.register),
                             ),
                           ],
                         ),

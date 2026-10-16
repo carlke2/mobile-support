@@ -3,13 +3,20 @@ import 'package:boardroom/features/auth/domain/auth_user.dart';
 import 'package:boardroom/core/network/api_exception.dart';
 
 class FakeAuthRepository implements AuthRepository {
-  FakeAuthRepository({this.user, this.signInError, this.registerError});
+  FakeAuthRepository({
+    this.user,
+    this.restoreUser,
+    this.signInError,
+    this.registerError,
+  });
 
   AuthUser? user;
+  AuthUser? restoreUser;
   ApiException? signInError;
   ApiException? registerError;
   int signInCalls = 0;
   int registerCalls = 0;
+  int signOutCalls = 0;
   String? email;
   String? name;
   String? phone;
@@ -31,11 +38,12 @@ class FakeAuthRepository implements AuthRepository {
     if (signedIn == null) {
       throw const ApiException.backend(message: 'Sign in failed.');
     }
+    restoreUser = signedIn;
     return signedIn;
   }
 
   @override
-  Future<void> register({
+  Future<AuthUser> register({
     required String name,
     required String email,
     required String phone,
@@ -50,6 +58,18 @@ class FakeAuthRepository implements AuthRepository {
     if (error != null) {
       throw error;
     }
+    final created = user ??
+        AuthUser(
+          id: 'user-1',
+          name: name,
+          email: email,
+          phone: phone,
+          role: 'USER',
+          roles: const <String>['USER'],
+          activeRole: 'USER',
+        );
+    restoreUser = created;
+    return created;
   }
 
   @override
@@ -62,10 +82,13 @@ class FakeAuthRepository implements AuthRepository {
   }) async {}
 
   @override
-  Future<void> signOut() async {}
+  Future<void> signOut() async {
+    signOutCalls += 1;
+    restoreUser = null;
+  }
 
   @override
-  Future<AuthUser?> restore() async => null;
+  Future<AuthUser?> restore() async => restoreUser;
 
   @override
   Stream<AuthChange> watch() => const Stream<AuthChange>.empty();

@@ -1,3 +1,4 @@
+import 'package:boardroom/core/router/app_routes.dart';
 import 'package:boardroom/features/auth/data/auth_repository.dart';
 import 'package:boardroom/features/auth/presentation/register_screen.dart';
 import 'package:flutter/material.dart';
@@ -30,10 +31,10 @@ void main() {
     expect(auth.registerCalls, 0);
   });
 
-  testWidgets('register sends the account fields and opens sign in', (
+  testWidgets('register sends the account fields and opens the dashboard', (
     tester,
   ) async {
-    final auth = FakeAuthRepository();
+    final auth = FakeAuthRepository(user: fakeUser());
     await _pump(tester, auth: auth);
 
     await tester.enterText(find.byKey(const Key('name-field')), 'Ada');
@@ -52,22 +53,25 @@ void main() {
     expect(auth.name, 'Ada');
     expect(auth.email, 'ada@example.com');
     expect(auth.phone, '0712345678');
-    expect(find.text('Account created. Sign in to continue.'), findsOneWidget);
+    expect(find.text('home'), findsOneWidget);
   });
 }
 
 Future<void> _pump(WidgetTester tester, {required AuthRepository auth}) async {
   final router = GoRouter(
-    initialLocation: '/register',
+    initialLocation: AppRoutes.register,
     routes: [
       GoRoute(
-        path: '/register',
+        path: AppRoutes.register,
         builder: (context, state) => const RegisterScreen(),
       ),
       GoRoute(
-        path: '/login',
-        builder: (context, state) =>
-            const Scaffold(body: Text('Account created. Sign in to continue.')),
+        path: AppRoutes.home,
+        builder: (context, state) => const Scaffold(body: Text('home')),
+      ),
+      GoRoute(
+        path: AppRoutes.login,
+        builder: (context, state) => const Scaffold(body: Text('login')),
       ),
     ],
   );

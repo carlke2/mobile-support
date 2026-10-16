@@ -2,11 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/auth/pending_route.dart';
 import '../../../core/network/api_exception.dart';
+import '../../../core/router/app_routes.dart';
 import '../../../core/theme/app_tokens.dart';
 import '../../../shared/widgets/app_logo.dart';
 import '../../../shared/widgets/glass_button.dart';
 import '../application/auth_controller.dart';
+import '../domain/auth_destinations.dart';
 import 'auth_fields.dart';
 import 'auth_scaffold.dart';
 
@@ -65,7 +68,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     }
     setState(() => _submitting = true);
     try {
-      await ref
+      final user = await ref
           .read(authControllerProvider.notifier)
           .register(
             name: _nameController.text.trim(),
@@ -76,7 +79,11 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
       if (!mounted) {
         return;
       }
-      context.go('/login?created=1');
+      final pending = ref.read(pendingRouteProvider);
+      ref.read(pendingRouteProvider.notifier).clear();
+      context.go(
+        destinationAfterAuth(role: user.activeRole, pendingDeepLink: pending),
+      );
     } on ApiException catch (error) {
       if (!mounted) {
         return;
@@ -170,7 +177,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
             onPressed: _submit,
           ),
           TextButton(
-            onPressed: () => context.go('/login'),
+            onPressed: () => context.go(AppRoutes.login),
             child: const Text('Sign in', style: AppTypography.label),
           ),
         ],

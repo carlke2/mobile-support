@@ -7,19 +7,24 @@ import 'package:http/http.dart' as http;
 import '../config/app_config.dart';
 import '../storage/token_storage.dart';
 import 'api_exception.dart';
+import 'unauthorized_hub.dart';
 
 /// HTTP client for the Express API. Every call goes to [AppConfig.apiBaseUrl].
 class ApiClient {
   ApiClient({
     required this.baseUrl,
     required this.readToken,
+    required this.clearToken,
     http.Client? httpClient,
     this.receiveTimeout = const Duration(seconds: 20),
+    this.onUnauthorized,
   }) : _http = httpClient ?? http.Client();
 
   final String baseUrl;
   final Future<String?> Function() readToken;
+  final Future<void> Function() clearToken;
   final Duration receiveTimeout;
+  final Future<void> Function()? onUnauthorized;
   final http.Client _http;
 
   void close() => _http.close();
@@ -57,7 +62,8 @@ class ApiClient {
     final uri = Uri.parse('$baseUrl$path');
     final headers = <String, String>{'Accept': 'application/json'};
     final auth = token ?? await readToken();
-    if (auth != null && auth.isNotEmpty) {
+    final hadBearer = auth != null && auth.isNotEmpty;
+    if (hadBearer) {
       headers['Authorization'] = 'Bearer $auth';
     }
     if (body != null) {
@@ -97,6 +103,18 @@ class ApiClient {
       }
     }
 
+    if (streamed.statusCode == 401) {
+      if (hadBearer) {
+        await clearToken();
+        await onUnauthorized?.call();
+      }
+      final map = asJsonMap(decoded);
+      throw ApiException.backend(
+        message: map == null ? 'Request failed' : messageFromBody(map),
+        statusCode: 401,
+      );
+    }
+
     if (streamed.statusCode >= 400) {
       final map = asJsonMap(decoded);
       throw ApiException.backend(
@@ -111,10 +129,13 @@ class ApiClient {
 final apiClientProvider = Provider<ApiClient>((ref) {
   final config = ref.watch(appConfigProvider);
   final storage = ref.watch(tokenStorageProvider);
+  final hub = ref.watch(unauthorizedHubProvider);
   final client = ApiClient(
     baseUrl: config.apiBaseUrl,
     readToken: storage.read,
+    clearToken: storage.clear,
     receiveTimeout: config.receiveTimeout,
+    onUnauthorized: hub.notify,
   );
   ref.onDispose(client.close);
   return client;

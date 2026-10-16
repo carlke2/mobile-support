@@ -1,11 +1,13 @@
 import 'dart:async';
 
+import 'package:boardroom/app.dart';
+import 'package:boardroom/core/auth/auth_state.dart';
 import 'package:boardroom/core/config/app_config.dart';
+import 'package:boardroom/core/router/app_routes.dart';
 import 'package:boardroom/features/auth/application/auth_controller.dart';
 import 'package:boardroom/features/auth/data/auth_repository.dart';
-import 'package:boardroom/features/auth/domain/auth_user.dart';
+import 'package:boardroom/features/home/application/home_counts.dart';
 import 'package:boardroom/features/home/presentation/home_placeholder_screen.dart';
-import 'package:boardroom/app.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -92,7 +94,7 @@ void main() {
 
 class _ReadyAuth extends AuthController {
   @override
-  Future<AuthUser?> build() async => fakeUser();
+  AuthState build() => AuthSignedIn(role: 'USER', user: fakeUser());
 }
 
 Future<void> _pumpHome(
@@ -102,14 +104,14 @@ Future<void> _pumpHome(
   bool pending = false,
 }) async {
   final router = GoRouter(
-    initialLocation: '/home',
+    initialLocation: AppRoutes.home,
     routes: [
       GoRoute(
-        path: '/home',
+        path: AppRoutes.home,
         builder: (context, state) => const HomePlaceholderScreen(),
       ),
       GoRoute(
-        path: '/welcome',
+        path: AppRoutes.welcome,
         builder: (context, state) => const Text('welcome-screen'),
       ),
     ],
@@ -139,7 +141,7 @@ Future<void> _pumpHome(
   );
   if (pending) {
     await tester.pump();
-    return;
+  } else {
+    await tester.pumpAndSettle();
   }
-  await tester.pumpAndSettle();
 }

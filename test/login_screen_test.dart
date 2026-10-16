@@ -1,3 +1,4 @@
+import 'package:boardroom/core/router/app_routes.dart';
 import 'package:boardroom/features/auth/data/auth_repository.dart';
 import 'package:boardroom/features/auth/presentation/login_screen.dart';
 import 'package:boardroom/core/network/api_exception.dart';
@@ -90,31 +91,34 @@ Future<void> _pumpLogin(
   required AuthRepository auth,
 }) async {
   final router = GoRouter(
-    initialLocation: '/login',
+    initialLocation: AppRoutes.login,
     routes: [
-      GoRoute(path: '/login', builder: (context, state) => const LoginScreen()),
       GoRoute(
-        path: '/home',
+        path: AppRoutes.login,
+        builder: (context, state) => const LoginScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.home,
         builder: (context, state) => const Scaffold(body: Text('home')),
       ),
       GoRoute(
-        path: '/staff',
+        path: AppRoutes.staff,
         builder: (context, state) => const Scaffold(body: Text('staff')),
       ),
       GoRoute(
-        path: '/admin',
+        path: AppRoutes.admin,
         builder: (context, state) => const Scaffold(body: Text('admin')),
       ),
       GoRoute(
-        path: '/welcome',
+        path: AppRoutes.welcome,
         builder: (context, state) => const Scaffold(body: Text('welcome')),
       ),
       GoRoute(
-        path: '/register',
+        path: AppRoutes.register,
         builder: (context, state) => const Scaffold(body: Text('register')),
       ),
       GoRoute(
-        path: '/forgot-password',
+        path: AppRoutes.forgotPassword,
         builder: (context, state) => const Scaffold(body: Text('forgot')),
       ),
     ],

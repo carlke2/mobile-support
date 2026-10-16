@@ -14,8 +14,9 @@ void main() {
     final client = ApiClient(
       baseUrl: 'http://127.0.0.1:5000',
       readToken: () async => 'session-token',
+      clearToken: () async {},
       httpClient: MockClient((request) async {
-        expect(request.url.toString(), 'http://127.0.0.1:5000/api/home');
+        expect(request.url.toString(), 'http://127.0.0.1:5000/home/counts');
         expect(request.headers['authorization'], 'Bearer session-token');
         return http.Response(
           jsonEncode(<String, dynamic>{
@@ -41,6 +42,7 @@ void main() {
     final client = ApiClient(
       baseUrl: 'http://127.0.0.1:5000',
       readToken: storage.read,
+      clearToken: storage.clear,
       httpClient: MockClient((request) async {
         expect(request.url.path, '/auth/login');
         final sent = jsonDecode(request.body) as Map<String, dynamic>;
@@ -48,7 +50,7 @@ void main() {
         return http.Response(
           jsonEncode(<String, dynamic>{
             'ok': true,
-            'token': 'jwt-1',
+            'accessToken': 'jwt-1',
             'user': <String, dynamic>{
               'id': 'user-1',
               'name': 'Ada',
@@ -93,6 +95,7 @@ void main() {
     final client = ApiClient(
       baseUrl: 'http://127.0.0.1:5000',
       readToken: () async => null,
+      clearToken: () async {},
       httpClient: MockClient((request) async {
         return http.Response(
           jsonEncode(<String, dynamic>{

@@ -1,4 +1,5 @@
 import 'package:boardroom/core/config/app_config.dart';
+import 'package:boardroom/core/router/app_routes.dart';
 import 'package:boardroom/features/home/presentation/welcome_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -30,18 +31,18 @@ Future<void> _pumpAt(WidgetTester tester, Size size) async {
   addTearDown(tester.view.resetDevicePixelRatio);
 
   final router = GoRouter(
-    initialLocation: '/welcome',
+    initialLocation: AppRoutes.welcome,
     routes: [
       GoRoute(
-        path: '/welcome',
+        path: AppRoutes.welcome,
         builder: (context, state) => const WelcomeScreen(),
       ),
       GoRoute(
-        path: '/login',
+        path: AppRoutes.login,
         builder: (context, state) => const Scaffold(body: Text('login')),
       ),
       GoRoute(
-        path: '/register',
+        path: AppRoutes.register,
         builder: (context, state) => const Scaffold(body: Text('register')),
       ),
     ],

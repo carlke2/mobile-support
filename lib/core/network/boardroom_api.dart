@@ -8,7 +8,7 @@ class BoardroomApi {
 
   final ApiClient _client;
 
-  Future<Map<String, dynamic>> homeCounts() => _client.get('/api/home');
+  Future<Map<String, dynamic>> homeCounts() => _client.get('/home/counts');
 }
 
 final boardroomApiProvider = Provider<BoardroomApi>((ref) {
