@@ -6,7 +6,7 @@ import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
 import 'core/theme/app_tokens.dart';
 
-/// Shown instead of crashing when `env/dev.json` is incomplete.
+/// Shown when the backend URL was not provided.
 class SetupRequiredApp extends StatelessWidget {
   const SetupRequiredApp({required this.config, super.key});
 
@@ -16,6 +16,7 @@ class SetupRequiredApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Boardroom',
+      debugShowCheckedModeBanner: false,
       theme: AppTheme.dark(),
       home: Scaffold(
         backgroundColor: AppColors.sceneBottom,
@@ -45,6 +46,7 @@ class App extends ConsumerWidget {
     );
     return MaterialApp.router(
       title: 'Boardroom',
+      debugShowCheckedModeBanner: false,
       theme: AppTheme.dark(blurSigma: blur),
       routerConfig: router,
       builder: (context, child) {

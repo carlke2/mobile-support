@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -47,9 +48,35 @@ abstract class AuthRepository {
 
   Future<void> signOut();
 
-  Future<AuthUser?> restore();
+  Future<SessionRestore> restore();
 
   Stream<AuthChange> watch();
+}
+
+/// Result of reading a saved session at startup.
+sealed class SessionRestore {
+  const SessionRestore();
+}
+
+class SessionReady extends SessionRestore {
+  const SessionReady(this.user);
+
+  final AuthUser user;
+}
+
+class SessionAbsent extends SessionRestore {
+  const SessionAbsent();
+}
+
+class SessionRejected extends SessionRestore {
+  const SessionRejected();
+}
+
+/// The API could not be reached. [user] is the last profile, when one was saved.
+class SessionOffline extends SessionRestore {
+  const SessionOffline(this.user);
+
+  final AuthUser? user;
 }
 
 class BackendAuthRepository implements AuthRepository {
@@ -126,23 +153,22 @@ class BackendAuthRepository implements AuthRepository {
   }
 
   @override
-  Future<AuthUser?> restore() async {
+  Future<SessionRestore> restore() async {
     final token = await _tokens.read();
     if (token == null) {
-      return null;
+      return const SessionAbsent();
     }
     try {
-      final body = await _client.get('/auth/me');
-      final user = body['user'];
-      if (user is! Map) {
-        await _tokens.clear();
-        return null;
-      }
-      return authUserFromSession(Map<String, dynamic>.from(user));
+      final user = await _loadProfile();
+      await _tokens.write(token, profile: jsonEncode(user.toJson()));
+      return SessionReady(user);
     } on ApiException catch (error) {
       if (error is ApiExceptionBackend && error.statusCode == 401) {
         await _tokens.clear();
-        return null;
+        return const SessionRejected();
+      }
+      if (error is ApiExceptionNetwork || error is ApiExceptionTimeout) {
+        return SessionOffline(await _cachedUser());
       }
       rethrow;
     }
@@ -153,12 +179,55 @@ class BackendAuthRepository implements AuthRepository {
 
   Future<AuthUser> _storeSession(Map<String, dynamic> body) async {
     final token = _readAccessToken(body);
-    final user = body['user'];
-    if (token == null || user is! Map) {
+    if (token == null) {
       throw const ApiException.backend(message: 'Sign in failed.');
     }
-    await _tokens.write(token);
-    return authUserFromSession(Map<String, dynamic>.from(user));
+    final refresh = body['refreshToken']?.toString().trim() ?? '';
+    await _tokens.write(
+      token,
+      refreshToken: refresh.isEmpty ? null : refresh,
+    );
+    final profile = await _loadProfile(fallback: body['user']);
+    await _tokens.write(token, profile: jsonEncode(profile.toJson()));
+    return profile;
+  }
+
+  Future<AuthUser> _loadProfile({Object? fallback}) async {
+    try {
+      final me = await _client.get('/auth/me');
+      final profile = me['user'];
+      if (profile is Map) {
+        return authUserFromSession(Map<String, dynamic>.from(profile));
+      }
+    } on ApiException catch (error) {
+      if (error is ApiExceptionBackend && error.statusCode == 401) {
+        rethrow;
+      }
+      if (fallback is! Map) {
+        rethrow;
+      }
+    }
+    if (fallback is! Map) {
+      await _tokens.clear();
+      throw const ApiException.backend(message: 'Sign in failed.');
+    }
+    return authUserFromSession(Map<String, dynamic>.from(fallback));
+  }
+
+  Future<AuthUser?> _cachedUser() async {
+    final raw = await _tokens.readProfile();
+    if (raw == null) {
+      return null;
+    }
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map) {
+        return null;
+      }
+      return AuthUser.fromJson(Map<String, dynamic>.from(decoded));
+    } on Object {
+      return null;
+    }
   }
 
   String? _readAccessToken(Map<String, dynamic> body) {

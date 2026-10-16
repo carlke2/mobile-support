@@ -1,7 +1,12 @@
+import 'dart:convert';
+
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-/// Runtime configuration. The only connection setting is the backend URL,
-/// from `--dart-define` or `--dart-define-from-file` (`env/dev.json`).
+/// Local API used when `env/dev.json` has no `API_BASE_URL`.
+const defaultApiBaseUrl = 'http://127.0.0.1:5000';
+
+/// Runtime configuration loaded from the bundled `env/dev.json` file.
 class AppConfig {
   const AppConfig({
     this.apiBaseUrl = '',
@@ -14,7 +19,6 @@ class AppConfig {
     this.pushEnabled = false,
   });
 
-  static const apiBaseUrlKey = 'API_BASE_URL';
   static const _defaultConnectMs = 10000;
   static const _defaultSendMs = 20000;
   static const _defaultReceiveMs = 20000;
@@ -30,62 +34,76 @@ class AppConfig {
   final double glassBlurSigma;
   final bool pushEnabled;
 
-  /// Keys that must be filled before the app can call the backend.
-  List<String> get missingKeys {
-    final missing = <String>[];
-    if (apiBaseUrl.trim().isEmpty) {
-      missing.add(apiBaseUrlKey);
-    }
-    return missing;
-  }
+  bool get canLaunch => apiBaseUrl.trim().isNotEmpty;
 
-  bool get canLaunch => missingKeys.isEmpty;
-
-  /// Sentence for the setup screen. Names the missing key. Never includes a value.
+  /// Shown when the backend URL was not provided. Names no setting.
   String get setupMessage {
-    if (missingKeys.isEmpty) {
+    if (canLaunch) {
       return '';
     }
-    return 'Missing ${missingKeys.join(' and ')}. '
-        'Set it in env/dev.json and run with '
-        '--dart-define-from-file=env/dev.json.';
+    return 'Backend URL missing.';
   }
 
-  factory AppConfig.fromEnvironment() {
-    const url = String.fromEnvironment(apiBaseUrlKey);
-    const phone = String.fromEnvironment('SUPPORT_PHONE');
-    const connectMs = int.fromEnvironment(
-      'CONNECT_TIMEOUT_MS',
-      defaultValue: _defaultConnectMs,
-    );
-    const sendMs = int.fromEnvironment(
-      'SEND_TIMEOUT_MS',
-      defaultValue: _defaultSendMs,
-    );
-    const receiveMs = int.fromEnvironment(
-      'RECEIVE_TIMEOUT_MS',
-      defaultValue: _defaultReceiveMs,
-    );
-    const pageSize = int.fromEnvironment(
-      'PAGE_SIZE',
-      defaultValue: _defaultPageSize,
-    );
-    const blur = String.fromEnvironment('GLASS_BLUR_SIGMA');
-    const push = bool.fromEnvironment('PUSH_ENABLED');
-    final parsedBlur = double.tryParse(blur);
+  /// Reads `mobile/env/dev.json`. A missing file or blank URL uses [defaultApiBaseUrl].
+  static Future<AppConfig> load() async {
+    try {
+      final decoded = jsonDecode(await rootBundle.loadString('env/dev.json'));
+      if (decoded is Map) {
+        return AppConfig.fromValues(Map<Object?, Object?>.from(decoded));
+      }
+    } on Object {
+      // Fall through to the local default.
+    }
+    return AppConfig.fromValues(const {});
+  }
+
+  factory AppConfig.fromValues(Map<Object?, Object?> values) {
+    final url = _trimTrailingSlash(_text(values, 'API_BASE_URL'));
+    final pageSize = int.tryParse(_text(values, 'PAGE_SIZE')) ?? _defaultPageSize;
+    final parsedBlur = double.tryParse(_text(values, 'GLASS_BLUR_SIGMA'));
     return AppConfig(
-      apiBaseUrl: _trimTrailingSlash(url.trim()),
-      supportPhone: phone.trim(),
-      connectTimeout: Duration(milliseconds: connectMs),
-      sendTimeout: Duration(milliseconds: sendMs),
-      receiveTimeout: Duration(milliseconds: receiveMs),
+      apiBaseUrl: url.isEmpty ? defaultApiBaseUrl : url,
+      supportPhone: _text(values, 'SUPPORT_PHONE'),
       pageSize: pageSize < 1 ? _defaultPageSize : pageSize,
       glassBlurSigma: parsedBlur == null || parsedBlur <= 0
           ? _defaultBlur
           : parsedBlur,
-      pushEnabled: push,
+      pushEnabled: _text(values, 'PUSH_ENABLED').toLowerCase() == 'true',
     );
   }
+}
+
+/// `KEY=value` lines. Blank lines and `#` comments are skipped.
+Map<String, String> parseDotEnv(String source) {
+  final values = <String, String>{};
+  for (final raw in source.split('\n')) {
+    final line = raw.trim();
+    if (line.isEmpty || line.startsWith('#')) {
+      continue;
+    }
+    final separator = line.indexOf('=');
+    if (separator <= 0) {
+      continue;
+    }
+    final key = line.substring(0, separator).trim();
+    var value = line.substring(separator + 1).trim();
+    final quoted =
+        (value.startsWith('"') && value.endsWith('"') && value.length >= 2) ||
+        (value.startsWith("'") && value.endsWith("'") && value.length >= 2);
+    if (quoted) {
+      value = value.substring(1, value.length - 1);
+    }
+    values[key] = value;
+  }
+  return values;
+}
+
+String _text(Map<Object?, Object?> values, String key) {
+  final value = values[key];
+  if (value == null) {
+    return '';
+  }
+  return value.toString().trim();
 }
 
 String _trimTrailingSlash(String url) {
@@ -95,7 +113,7 @@ String _trimTrailingSlash(String url) {
   return url;
 }
 
-/// Overridden in [main] with [AppConfig.fromEnvironment].
+/// Overridden in [main] with [AppConfig.load].
 final appConfigProvider = Provider<AppConfig>((ref) {
   throw StateError(
     'AppConfig was not provided. Override appConfigProvider at startup.',

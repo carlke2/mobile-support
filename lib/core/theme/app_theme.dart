@@ -49,7 +49,18 @@ abstract final class AppTheme {
       useMaterial3: true,
       brightness: Brightness.dark,
       scaffoldBackgroundColor: AppColors.background,
+      canvasColor: AppColors.background,
       colorScheme: scheme,
+      dialogTheme: const DialogThemeData(
+        backgroundColor: AppColors.sceneMid,
+        surfaceTintColor: Colors.transparent,
+      ),
+      navigationBarTheme: const NavigationBarThemeData(
+        backgroundColor: AppColors.sceneMid,
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
+        indicatorColor: AppColors.accent,
+      ),
       textTheme: const TextTheme(
         headlineSmall: AppTypography.title,
         bodyLarge: AppTypography.body,

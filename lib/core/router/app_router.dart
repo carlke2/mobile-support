@@ -8,7 +8,8 @@ import '../../features/auth/presentation/login_screen.dart';
 import '../../features/auth/presentation/register_screen.dart';
 import '../../features/auth/presentation/reset_password_screen.dart';
 import '../../features/auth/presentation/splash_screen.dart';
-import '../../features/home/presentation/home_placeholder_screen.dart';
+import '../../features/auth/presentation/offline_screen.dart';
+import '../../features/dashboard/presentation/dashboard_screen.dart';
 import '../../features/home/presentation/welcome_screen.dart';
 import '../auth/auth_state.dart';
 import '../auth/launch_prefs.dart';
@@ -118,28 +119,31 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => const ResetPasswordScreen(),
       ),
       GoRoute(
+        path: AppRoutes.offline,
+        pageBuilder: (context, state) => RootPage(
+          key: state.pageKey,
+          child: const OfflineScreen(),
+        ),
+      ),
+      GoRoute(
         path: AppRoutes.home,
         pageBuilder: (context, state) => RootPage(
           key: state.pageKey,
-          child: const HomePlaceholderScreen(),
+          child: const DashboardScreen(),
         ),
       ),
       GoRoute(
         path: AppRoutes.staff,
         pageBuilder: (context, state) => RootPage(
           key: state.pageKey,
-          child: const HomePlaceholderScreen(
-            heading: 'TEMPORARY — staff console comes next.',
-          ),
+          child: const DashboardScreen(),
         ),
       ),
       GoRoute(
         path: AppRoutes.admin,
         pageBuilder: (context, state) => RootPage(
           key: state.pageKey,
-          child: const HomePlaceholderScreen(
-            heading: 'TEMPORARY — admin dashboard comes next.',
-          ),
+          child: const DashboardScreen(),
         ),
       ),
     ],

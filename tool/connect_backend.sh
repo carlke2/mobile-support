@@ -15,7 +15,9 @@ if [[ ! -x "$ADB" ]]; then
   fi
 fi
 
-mapfile -t devices < <("$ADB" devices | awk 'NR > 1 && $2 == "device" { print $1 }')
+# Wireless mDNS serials can contain spaces (e.g. "adb-… (2)._adb-tls-connect._tcp").
+# Fields are tab-separated: <serial>\t<status>
+mapfile -t devices < <("$ADB" devices | awk -F '\t' 'NR > 1 && $2 ~ /^device/ { print $1 }')
 if [[ ${#devices[@]} -eq 0 ]]; then
   echo "No Android device is connected over ADB." >&2
   echo "Turn on Wireless debugging, then: $ADB connect <phone-ip>:<port>" >&2

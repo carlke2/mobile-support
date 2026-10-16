@@ -7,7 +7,7 @@ import 'package:boardroom/core/router/app_routes.dart';
 import 'package:boardroom/features/auth/application/auth_controller.dart';
 import 'package:boardroom/features/auth/data/auth_repository.dart';
 import 'package:boardroom/features/home/application/home_counts.dart';
-import 'package:boardroom/features/home/presentation/home_placeholder_screen.dart';
+import 'package:boardroom/features/dashboard/presentation/dashboard_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -35,6 +35,11 @@ void main() {
     expect(find.text('Unread notifications: 4'), findsOneWidget);
     expect(find.text('Upcoming bookings: 1'), findsOneWidget);
     expect(find.byKey(const Key('home-counts-empty')), findsNothing);
+    await tester.scrollUntilVisible(
+      find.text('Sign out'),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
     expect(find.text('Sign out'), findsOneWidget);
   });
 
@@ -76,6 +81,11 @@ void main() {
         upcomingBookings: 0,
       ),
     );
+    await tester.scrollUntilVisible(
+      find.text('Sign out'),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
     await tester.tap(find.text('Sign out'));
     await tester.pumpAndSettle();
     expect(find.text('welcome-screen'), findsOneWidget);
@@ -83,12 +93,11 @@ void main() {
 
   testWidgets('a missing backend url is named on screen', (tester) async {
     const config = AppConfig();
-    expect(config.missingKeys, <String>['API_BASE_URL']);
     expect(config.canLaunch, isFalse);
 
     await tester.pumpWidget(const SetupRequiredApp(config: config));
     expect(find.byKey(const Key('setup-error')), findsOneWidget);
-    expect(find.textContaining('API_BASE_URL'), findsOneWidget);
+    expect(find.text('Backend URL missing.'), findsOneWidget);
   });
 }
 
@@ -108,7 +117,7 @@ Future<void> _pumpHome(
     routes: [
       GoRoute(
         path: AppRoutes.home,
-        builder: (context, state) => const HomePlaceholderScreen(),
+        builder: (context, state) => const DashboardScreen(),
       ),
       GoRoute(
         path: AppRoutes.welcome,

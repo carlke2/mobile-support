@@ -88,7 +88,13 @@ class FakeAuthRepository implements AuthRepository {
   }
 
   @override
-  Future<AuthUser?> restore() async => restoreUser;
+  Future<SessionRestore> restore() async {
+    final saved = restoreUser;
+    if (saved == null) {
+      return const SessionAbsent();
+    }
+    return SessionReady(saved);
+  }
 
   @override
   Stream<AuthChange> watch() => const Stream<AuthChange>.empty();

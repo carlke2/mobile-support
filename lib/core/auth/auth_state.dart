@@ -28,3 +28,9 @@ final class AuthExpired extends AuthState {
 
   final String message;
 }
+
+/// A saved session exists but the API could not be reached and no profile
+/// was cached. This is not a sign-out.
+final class AuthOffline extends AuthState {
+  const AuthOffline();
+}

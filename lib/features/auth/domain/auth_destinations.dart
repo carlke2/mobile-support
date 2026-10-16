@@ -22,6 +22,10 @@ String? authRedirect({
     return path == AppRoutes.splash ? null : AppRoutes.splash;
   }
 
+  if (auth is AuthOffline) {
+    return path == AppRoutes.offline ? null : AppRoutes.offline;
+  }
+
   if (auth is AuthSignedOut || auth is AuthExpired) {
     if (AppRoutes.isPrivate(path) ||
         AppRoutes.isSplash(path) ||
@@ -36,7 +40,8 @@ String? authRedirect({
 
   if (auth is AuthSignedIn) {
     final dashboard = AppRoutes.dashboardFor(auth.role);
-    if (AppRoutes.isPublic(path) ||
+    if (path == AppRoutes.offline ||
+        AppRoutes.isPublic(path) ||
         AppRoutes.isSplash(path) ||
         AppRoutes.isRoot(path)) {
       final pending = pendingDeepLink;

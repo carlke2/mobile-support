@@ -47,6 +47,8 @@ class AuthController extends Notifier<AuthState> {
     return current is AuthSignedIn ? current.user : null;
   }
 
+  Future<void> retry() => _restore();
+
   Future<void> _restore() async {
     if (pendingPasswordRecovery) {
       ref.read(passwordRecoveryProvider.notifier).begin();
@@ -56,16 +58,31 @@ class AuthController extends Notifier<AuthState> {
       if (!ref.mounted) {
         return;
       }
-      if (restored == null) {
-        state = const AuthSignedOut();
-        return;
-      }
-      state = AuthSignedIn(role: restored.activeRole, user: restored);
+      _applyRestore(restored);
     } on Object {
-      if (!ref.mounted) {
+      if (!ref.mounted || state is AuthSignedIn || state is AuthExpired) {
         return;
       }
-      state = const AuthSignedOut();
+      state = const AuthOffline();
+    }
+  }
+
+  void _applyRestore(SessionRestore restored) {
+    switch (restored) {
+      case SessionReady(:final user):
+        state = AuthSignedIn(role: user.activeRole, user: user);
+      case SessionAbsent():
+        if (state is! AuthExpired) {
+          state = const AuthSignedOut();
+        }
+      case SessionRejected():
+        state = const AuthExpired();
+      case SessionOffline(:final user):
+        if (user == null) {
+          state = const AuthOffline();
+          return;
+        }
+        state = AuthSignedIn(role: user.activeRole, user: user);
     }
   }
 
@@ -126,12 +143,17 @@ class AuthController extends Notifier<AuthState> {
     _clearSignedOut();
   }
 
-  /// Called when ApiClient receives a 401 with a bearer token.
+  /// Called when a refresh token is rejected. Network failures do not come here.
   Future<void> expireSession() async {
     if (state is AuthExpired) {
       return;
     }
-    await ref.read(authRepositoryProvider).signOut();
+    _holdSession = true;
+    try {
+      await ref.read(authRepositoryProvider).signOut();
+    } finally {
+      _holdSession = false;
+    }
     _invalidateUserScoped();
     if (!ref.mounted) {
       return;
@@ -183,11 +205,7 @@ class AuthController extends Notifier<AuthState> {
     if (!ref.mounted) {
       return;
     }
-    if (restored == null) {
-      _clearSignedOut();
-      return;
-    }
-    state = AuthSignedIn(role: restored.activeRole, user: restored);
+    _applyRestore(restored);
   }
 
   void _clearSignedOut() {

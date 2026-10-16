@@ -1,33 +1,81 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:http/http.dart' as http;
 
 import '../config/app_config.dart';
 import '../storage/token_storage.dart';
 import 'api_exception.dart';
 import 'unauthorized_hub.dart';
 
+/// Adds `Authorization: Bearer` from secure storage on every call.
+class BearerTokenInterceptor extends Interceptor {
+  BearerTokenInterceptor({required this.readToken});
+
+  final Future<String?> Function() readToken;
+
+  @override
+  void onRequest(
+    RequestOptions options,
+    RequestInterceptorHandler handler,
+  ) async {
+    try {
+      if (options.extra['skipAuth'] == true) {
+        handler.next(options);
+        return;
+      }
+      final override = options.extra['tokenOverride'];
+      final String? auth = override is String ? override : await readToken();
+      if (auth != null && auth.isNotEmpty) {
+        options.headers['Authorization'] = 'Bearer $auth';
+        options.extra['hadBearer'] = true;
+      }
+      handler.next(options);
+    } on Object catch (error) {
+      handler.reject(
+        DioException(requestOptions: options, error: error),
+      );
+    }
+  }
+}
+
 /// HTTP client for the Express API. Every call goes to [AppConfig.apiBaseUrl].
 class ApiClient {
   ApiClient({
-    required this.baseUrl,
-    required this.readToken,
-    required this.clearToken,
-    http.Client? httpClient,
+    required String baseUrl,
+    required Future<String?> Function() readToken,
+    Dio? dio,
     this.receiveTimeout = const Duration(seconds: 20),
+    this.connectTimeout = const Duration(seconds: 10),
+    this.sendTimeout = const Duration(seconds: 20),
+    this.readRefresh,
+    this.writeSession,
     this.onUnauthorized,
-  }) : _http = httpClient ?? http.Client();
+    required this.clearToken,
+  }) : _dio = dio ?? Dio() {
+    _dio.options
+      ..baseUrl = baseUrl
+      ..connectTimeout = connectTimeout
+      ..sendTimeout = sendTimeout
+      ..receiveTimeout = receiveTimeout
+      ..headers['Accept'] = 'application/json'
+      ..responseType = ResponseType.plain
+      ..validateStatus = (status) => status != null;
+    _dio.interceptors.add(BearerTokenInterceptor(readToken: readToken));
+  }
 
-  final String baseUrl;
-  final Future<String?> Function() readToken;
+  final Dio _dio;
   final Future<void> Function() clearToken;
-  final Duration receiveTimeout;
   final Future<void> Function()? onUnauthorized;
-  final http.Client _http;
+  final Future<String?> Function()? readRefresh;
+  final Future<void> Function(String access, String refresh)? writeSession;
+  final Duration receiveTimeout;
+  final Duration connectTimeout;
+  final Duration sendTimeout;
+  Future<_Refresh>? _refreshing;
 
-  void close() => _http.close();
+  void close() => _dio.close();
 
   Future<Map<String, dynamic>> get(String path, {String? token}) {
     return _send('GET', path, token: token);
@@ -58,73 +106,163 @@ class ApiClient {
     String path, {
     Map<String, dynamic>? body,
     String? token,
+    bool allowRefresh = true,
+    bool skipAuth = false,
   }) async {
-    final uri = Uri.parse('$baseUrl$path');
-    final headers = <String, String>{'Accept': 'application/json'};
-    final auth = token ?? await readToken();
-    final hadBearer = auth != null && auth.isNotEmpty;
-    if (hadBearer) {
-      headers['Authorization'] = 'Bearer $auth';
-    }
-    if (body != null) {
-      headers['Content-Type'] = 'application/json';
-    }
-
-    final request = http.Request(method, uri)..headers.addAll(headers);
-    if (body != null) {
-      request.body = jsonEncode(body);
-    }
-
-    late http.StreamedResponse streamed;
     try {
-      streamed = await _http.send(request).timeout(receiveTimeout);
-    } on TimeoutException {
-      throw const ApiException.timeout(
-        message: 'The server took too long to respond.',
+      final response = await _dio.request<Object?>(
+        path,
+        data: body,
+        options: Options(
+          method: method,
+          contentType: body == null ? null : Headers.jsonContentType,
+          responseType: ResponseType.plain,
+          extra: <String, Object?>{
+            'tokenOverride': ?token,
+            'skipAuth': skipAuth,
+          },
+        ),
       );
-    } on http.ClientException {
-      throw const ApiException.network(message: 'Unable to reach the server.');
-    } on Object {
-      throw const ApiException.network(message: 'Unable to reach the server.');
-    }
-
-    final text = await streamed.stream.bytesToString();
-    Object? decoded;
-    if (text.trim().isEmpty) {
-      decoded = <String, dynamic>{};
-    } else {
-      try {
-        decoded = jsonDecode(text);
-      } on Object {
-        throw ApiException.unknown(
-          message: 'Expected a JSON object.',
-          statusCode: streamed.statusCode,
+      final status = response.statusCode;
+      final hadBearer = response.requestOptions.extra['hadBearer'] == true;
+      if (status == 401 && hadBearer && allowRefresh) {
+        final outcome = await _tryRefresh();
+        switch (outcome) {
+          case _Refresh.ok:
+            return await _send(
+              method,
+              path,
+              body: body,
+              token: token,
+              allowRefresh: false,
+            );
+          case _Refresh.offline:
+            throw const ApiException.network(
+              message: 'Unable to reach the server.',
+            );
+          case _Refresh.rejected:
+            throw const ApiException.backend(
+              message: 'Session expired, please sign in again',
+              statusCode: 401,
+            );
+        }
+      }
+      return _decode(status, response.data);
+    } on DioException catch (error) {
+      if (_isTimeout(error.type)) {
+        throw const ApiException.timeout(
+          message: 'The server took too long to respond.',
         );
       }
+      throw const ApiException.network(
+        message: 'Unable to reach the server.',
+      );
     }
+  }
 
-    if (streamed.statusCode == 401) {
-      if (hadBearer) {
-        await clearToken();
-        await onUnauthorized?.call();
+  /// One refresh for every caller that hit 401 together.
+  Future<_Refresh> _tryRefresh() {
+    final pending = _refreshing;
+    if (pending != null) {
+      return pending;
+    }
+    final next = _refreshNow();
+    _refreshing = next;
+    return next.whenComplete(() {
+      if (identical(_refreshing, next)) {
+        _refreshing = null;
       }
-      final map = asJsonMap(decoded);
-      throw ApiException.backend(
-        message: map == null ? 'Request failed' : messageFromBody(map),
-        statusCode: 401,
-      );
-    }
+    });
+  }
 
-    if (streamed.statusCode >= 400) {
+  Future<_Refresh> _refreshNow() async {
+    final refresh = (await readRefresh?.call())?.trim() ?? '';
+    if (refresh.isEmpty || writeSession == null) {
+      await _rejectSession();
+      return _Refresh.rejected;
+    }
+    try {
+      final response = await _dio.request<Object?>(
+        '/auth/refresh',
+        data: <String, dynamic>{'refreshToken': refresh},
+        options: Options(
+          method: 'POST',
+          contentType: Headers.jsonContentType,
+          responseType: ResponseType.plain,
+          extra: const <String, Object?>{'skipAuth': true},
+        ),
+      );
+      final status = response.statusCode;
+      if (status == 401 || status == 400) {
+        await _rejectSession();
+        return _Refresh.rejected;
+      }
+      final body = _decode(status, response.data);
+      final access = body['accessToken']?.toString().trim() ?? '';
+      final rotated = body['refreshToken']?.toString().trim() ?? '';
+      if (access.isEmpty) {
+        await _rejectSession();
+        return _Refresh.rejected;
+      }
+      await writeSession!(access, rotated.isEmpty ? refresh : rotated);
+      return _Refresh.ok;
+    } on DioException {
+      return _Refresh.offline;
+    } on ApiExceptionNetwork {
+      return _Refresh.offline;
+    } on ApiExceptionTimeout {
+      return _Refresh.offline;
+    } on ApiException {
+      await _rejectSession();
+      return _Refresh.rejected;
+    }
+  }
+
+  Future<void> _rejectSession() async {
+    await clearToken();
+    await onUnauthorized?.call();
+  }
+
+  Map<String, dynamic> _decode(int? statusCode, Object? data) {
+    final decoded = _jsonBody(data, statusCode);
+    if (statusCode != null && statusCode >= 400) {
       final map = asJsonMap(decoded);
       throw ApiException.backend(
         message: map == null ? 'Request failed' : messageFromBody(map),
-        statusCode: streamed.statusCode,
+        statusCode: statusCode,
       );
     }
-    return parseSuccessBody(decoded, statusCode: streamed.statusCode);
+    return parseSuccessBody(decoded, statusCode: statusCode);
+  }
+
+  Object? _jsonBody(Object? data, int? statusCode) {
+    if (data == null) {
+      return <String, dynamic>{};
+    }
+    if (data is! String) {
+      return data;
+    }
+    if (data.trim().isEmpty) {
+      return <String, dynamic>{};
+    }
+    try {
+      return jsonDecode(data);
+    } on Object {
+      throw ApiException.unknown(
+        message: 'Expected a JSON object.',
+        statusCode: statusCode,
+      );
+    }
+  }
+
+  bool _isTimeout(DioExceptionType type) {
+    return type == DioExceptionType.connectionTimeout ||
+        type == DioExceptionType.sendTimeout ||
+        type == DioExceptionType.receiveTimeout;
   }
 }
+
+enum _Refresh { ok, rejected, offline }
 
 final apiClientProvider = Provider<ApiClient>((ref) {
   final config = ref.watch(appConfigProvider);
@@ -134,6 +272,11 @@ final apiClientProvider = Provider<ApiClient>((ref) {
     baseUrl: config.apiBaseUrl,
     readToken: storage.read,
     clearToken: storage.clear,
+    readRefresh: storage.readRefresh,
+    writeSession: (access, refresh) =>
+        storage.write(access, refreshToken: refresh),
+    connectTimeout: config.connectTimeout,
+    sendTimeout: config.sendTimeout,
     receiveTimeout: config.receiveTimeout,
     onUnauthorized: hub.notify,
   );

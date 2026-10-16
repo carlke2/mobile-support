@@ -1,18 +1,19 @@
 import 'package:flutter/material.dart';
 
-/// Charcoal scene and muted red, taken from the welcome HTML.
+/// Navy surfaces and Millennium red, sampled from millenium.co.ke.
+/// The red is the site's Talk To Us button, rgb(220, 38, 38).
 /// Widgets must use these tokens instead of literal colors.
 abstract final class AppColors {
-  static const sceneTop = Color(0xFF565963);
-  static const sceneMid = Color(0xFF3B3E47);
-  static const sceneBottom = Color(0xFF12141A);
+  static const sceneTop = Color(0xFF1F2937);
+  static const sceneMid = Color(0xFF111827);
+  static const sceneBottom = Color(0xFF0B1220);
 
-  static const accent = Color(0xFFB4504A);
-  static const accentPressed = Color(0xFF873330);
-  static const logo = Color(0xFFC4554D);
-  static const glow = Color(0xFFCF7468);
+  static const accent = Color(0xFFDC2626);
+  static const accentPressed = Color(0xFF991B1B);
+  static const logo = Color(0xFFEF4444);
+  static const glow = Color(0xFFEF4444);
 
-  static const textPrimary = Color(0xFFF1EDED);
+  static const textPrimary = Color(0xFFF8FAFC);
 
   /// White at 85% opacity.
   static const textSecondary = Color(0xD9FFFFFF);
@@ -21,7 +22,7 @@ abstract final class AppColors {
   static const textSection = Color(0xEBFFFFFF);
 
   static const onAccent = Color(0xFFFFFFFF);
-  static const error = Color(0xFFF0C2BE);
+  static const error = Color(0xFFFECACA);
 
   /// White at 12% opacity. Glass fills stay in the 10–14% range.
   static const glassFill = Color(0x1FFFFFFF);
@@ -37,20 +38,20 @@ abstract final class AppColors {
   /// Outlined pills: white border at 55%.
   static const pillBorder = Color(0x8CFFFFFF);
 
-  static const tile = Color(0xFF4B4E59);
+  static const tile = Color(0xFF1F2937);
 
-  /// color-mix(tile 85%, white) and color-mix(tile 70%, black).
-  static const tileHighlight = Color(0xFF666972);
-  static const tileShade = Color(0xFF35373E);
+  /// Lighter and deeper navy used on the site cards.
+  static const tileHighlight = Color(0xFF374151);
+  static const tileShade = Color(0xFF111827);
 
   static const veilTop = Color(0x1AFFFFFF);
   static const veilMid = Color(0x0D000000);
   static const veilBottom = Color(0x40000000);
 
-  static const buildingStart = Color(0xB20A0C10);
-  static const buildingEnd = Color(0x400A0C10);
-  static const roadStart = Color(0x1A28323A);
-  static const roadEnd = Color(0x9919232A);
+  static const buildingStart = Color(0xB2111827);
+  static const buildingEnd = Color(0x40111827);
+  static const roadStart = Color(0x1A1F2937);
+  static const roadEnd = Color(0x99111827);
 
   static const shadow = Color(0x59000000);
   static const logoShadow = Color(0x66000000);
