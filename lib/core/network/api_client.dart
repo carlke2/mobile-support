@@ -6,7 +6,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../config/app_config.dart';
 import '../storage/token_storage.dart';
+import 'api_base_url.dart';
 import 'api_exception.dart';
+import 'connection_failure.dart';
+import 'connectivity_exception.dart';
 import 'unauthorized_hub.dart';
 
 /// Adds `Authorization: Bearer` from secure storage on every call.
@@ -40,7 +43,7 @@ class BearerTokenInterceptor extends Interceptor {
   }
 }
 
-/// HTTP client for the Express API. Every call goes to [AppConfig.apiBaseUrl].
+/// HTTP client for the Express API. Every call goes to [effectiveApiBaseUrlProvider].
 class ApiClient {
   ApiClient({
     required String baseUrl,
@@ -54,7 +57,8 @@ class ApiClient {
     this.onRefreshInvalid,
     this.onTokenInvalid,
     required this.clearToken,
-  }) : _dio = dio ?? Dio() {
+  })  : baseUrl = baseUrl,
+        _dio = dio ?? Dio() {
     _dio.options
       ..baseUrl = baseUrl
       ..connectTimeout = connectTimeout
@@ -66,6 +70,8 @@ class ApiClient {
     _dio.interceptors.add(BearerTokenInterceptor(readToken: readToken));
   }
 
+  /// Express origin. Set only from [effectiveApiBaseUrlProvider].
+  final String baseUrl;
   final Dio _dio;
   final Future<void> Function() clearToken;
   final Future<void> Function()? onRefreshInvalid;
@@ -79,8 +85,12 @@ class ApiClient {
 
   void close() => _dio.close();
 
-  Future<Map<String, dynamic>> get(String path, {String? token}) {
-    return _send('GET', path, token: token);
+  Future<Map<String, dynamic>> get(
+    String path, {
+    String? token,
+    Map<String, dynamic>? query,
+  }) {
+    return _send('GET', path, token: token, query: query);
   }
 
   Future<Map<String, dynamic>> post(
@@ -107,6 +117,7 @@ class ApiClient {
     String method,
     String path, {
     Map<String, dynamic>? body,
+    Map<String, dynamic>? query,
     String? token,
     bool allowRefresh = true,
     bool skipAuth = false,
@@ -115,6 +126,7 @@ class ApiClient {
       final response = await _dio.request<Object?>(
         path,
         data: body,
+        queryParameters: _cleanQuery(query),
         options: Options(
           method: method,
           contentType: body == null ? null : Headers.jsonContentType,
@@ -142,12 +154,16 @@ class ApiClient {
               method,
               path,
               body: body,
+              query: query,
               token: token,
               allowRefresh: false,
             );
           case _Refresh.offline:
-            throw const ApiException.network(
-              message: 'Unable to reach the server.',
+            throw ConnectivityException(
+              ConnectionFailure.forReason(
+                reason: ConnectionFailureReason.unknown,
+                baseUrl: baseUrl,
+              ),
             );
           case _Refresh.rejected:
             throw const ApiException.backend(
@@ -164,18 +180,14 @@ class ApiClient {
           map: map,
           code: code,
           hadBearer: hadBearer,
+          requestId: response.headers.value('x-request-id') ??
+              (map == null ? null : _requestIdFromBody(map)),
         );
       }
       return parseSuccessBody(decoded, statusCode: status);
     } on DioException catch (error) {
-      if (_isTimeout(error.type)) {
-        throw const ApiException.timeout(
-          message: 'The server took too long to respond.',
-        );
-      }
-      throw const ApiException.network(
-        message: 'Unable to reach the server.',
-      );
+      final failure = ConnectionFailure.fromDio(error, baseUrl: baseUrl);
+      throw ConnectivityException(failure);
     }
   }
 
@@ -184,6 +196,7 @@ class ApiClient {
     required Map<String, dynamic>? map,
     required String? code,
     required bool hadBearer,
+    String? requestId,
   }) async {
     final message = map == null ? 'Request failed' : messageFromBody(map);
 
@@ -214,12 +227,49 @@ class ApiClient {
       );
     }
 
-    // 5xx and other failures never clear the session.
+    if (status >= 500) {
+      throw ConnectivityException(
+        ConnectionFailure.fromStatus(
+          baseUrl: baseUrl,
+          statusCode: status,
+          requestId: requestId,
+        ),
+      );
+    }
+
+    // Other failures never clear the session.
     throw ApiException.backend(
       message: code == ApiErrorCode.forbidden ? 'Not allowed' : message,
       statusCode: status,
       code: code,
+      booking: map == null ? null : bookingFromBody(map),
     );
+  }
+
+  Map<String, dynamic>? _cleanQuery(Map<String, dynamic>? query) {
+    if (query == null || query.isEmpty) {
+      return null;
+    }
+    final out = <String, dynamic>{};
+    query.forEach((key, value) {
+      if (value == null) {
+        return;
+      }
+      final text = value.toString();
+      if (text.isEmpty) {
+        return;
+      }
+      out[key] = value;
+    });
+    return out.isEmpty ? null : out;
+  }
+
+  String? _requestIdFromBody(Map<String, dynamic> map) {
+    final id = map['requestId'];
+    if (id is String && id.trim().isNotEmpty) {
+      return id.trim();
+    }
+    return null;
   }
 
   Future<_Refresh> _tryRefresh() {
@@ -279,6 +329,8 @@ class ApiClient {
       return _Refresh.ok;
     } on DioException {
       return _Refresh.offline;
+    } on ConnectivityException {
+      return _Refresh.offline;
     } on ApiExceptionNetwork {
       return _Refresh.offline;
     } on ApiExceptionTimeout {
@@ -319,21 +371,17 @@ class ApiClient {
     }
   }
 
-  bool _isTimeout(DioExceptionType type) {
-    return type == DioExceptionType.connectionTimeout ||
-        type == DioExceptionType.sendTimeout ||
-        type == DioExceptionType.receiveTimeout;
-  }
 }
 
 enum _Refresh { ok, rejected, offline }
 
 final apiClientProvider = Provider<ApiClient>((ref) {
   final config = ref.watch(appConfigProvider);
+  final baseUrl = ref.watch(effectiveApiBaseUrlProvider);
   final storage = ref.watch(tokenStorageProvider);
   final hub = ref.watch(unauthorizedHubProvider);
   final client = ApiClient(
-    baseUrl: config.apiBaseUrl,
+    baseUrl: baseUrl,
     readToken: storage.read,
     clearToken: storage.clear,
     readRefresh: storage.readRefresh,

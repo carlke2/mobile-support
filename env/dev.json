@@ -1,5 +1,5 @@
 {
-  "API_BASE_URL": "http://127.0.0.1:5000",
+  "API_BASE_URL": "http://10.223.78.122:5000",
   "SUPPORT_PHONE": "",
   "PAGE_SIZE": 20,
   "GLASS_BLUR_SIGMA": 14,

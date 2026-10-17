@@ -1,16 +1,20 @@
 import 'package:freezed_annotation/freezed_annotation.dart';
 
+import 'json_keys.dart';
+
 part 'api_exception.freezed.dart';
 
 /// Typed failure from the Boardroom API.
 ///
 /// [ApiException.backend] carries `{ "ok": false, "message", "code"? }`.
+/// Conflict responses may also include `booking` (docs/API.md).
 @freezed
 sealed class ApiException with _$ApiException implements Exception {
   const factory ApiException.backend({
     required String message,
     int? statusCode,
     String? code,
+    Map<String, dynamic>? booking,
   }) = ApiExceptionBackend;
 
   const factory ApiException.network({required String message}) =
@@ -49,20 +53,13 @@ Map<String, dynamic> parseSuccessBody(Object? data, {int? statusCode}) {
       message: messageFromBody(body),
       statusCode: statusCode,
       code: codeFromBody(body),
+      booking: bookingFromBody(body),
     );
   }
   return body;
 }
 
-Map<String, dynamic>? asJsonMap(Object? data) {
-  if (data is Map<String, dynamic>) {
-    return data;
-  }
-  if (data is Map) {
-    return Map<String, dynamic>.from(data);
-  }
-  return null;
-}
+Map<String, dynamic>? asJsonMap(Object? data) => asStringKeyedMap(data);
 
 String messageFromBody(Map<String, dynamic> body) {
   final message = body['message'];
@@ -80,6 +77,10 @@ String? codeFromBody(Map<String, dynamic> body) {
   return null;
 }
 
+Map<String, dynamic>? bookingFromBody(Map<String, dynamic> body) {
+  return asStringKeyedMap(body['booking']);
+}
+
 /// User-facing copy for codes that stay signed in.
 String displayMessageFor(ApiException error) {
   if (error is ApiExceptionBackend) {
@@ -95,4 +96,21 @@ String displayMessageFor(ApiException error) {
     }
   }
   return error.message;
+}
+
+/// Conflict message plus optional clash window from docs/API.md.
+String conflictDisplayMessage(ApiException error) {
+  if (error is! ApiExceptionBackend) {
+    return error.message;
+  }
+  final booking = error.booking;
+  if (booking == null) {
+    return error.message;
+  }
+  final start = readString(booking, 'startAt', 'start_at');
+  final end = readString(booking, 'endAt', 'end_at');
+  if (start == null || end == null) {
+    return error.message;
+  }
+  return '${error.message} ($start – $end)';
 }

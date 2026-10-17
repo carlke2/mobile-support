@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:boardroom/core/network/api_client.dart';
 import 'package:boardroom/core/network/api_exception.dart';
+import 'package:boardroom/core/network/connectivity_exception.dart';
 import 'package:boardroom/core/storage/token_storage.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -203,7 +204,7 @@ void main() {
 
     await expectLater(
       client.get('/dashboard/user'),
-      throwsA(isA<ApiExceptionNetwork>()),
+      throwsA(isA<ConnectivityException>()),
     );
     expect(await storage.read(), 'jwt');
   });
@@ -226,7 +227,7 @@ void main() {
 
     await expectLater(
       client.get('/dashboard/user'),
-      throwsA(isA<ApiExceptionBackend>()),
+      throwsA(isA<ConnectivityException>()),
     );
     expect(await storage.read(), 'jwt');
   });

@@ -4,9 +4,13 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/auth/pending_route.dart';
 import '../../../core/network/api_exception.dart';
+import '../../../core/network/connection_failure.dart';
+import '../../../core/network/connectivity_exception.dart';
+import '../../../core/network/health_status.dart';
 import '../../../core/router/app_routes.dart';
 import '../../../core/theme/app_tokens.dart';
 import '../../../shared/widgets/app_logo.dart';
+import '../../../shared/widgets/connection_failure_panel.dart';
 import '../../../shared/widgets/glass_button.dart';
 import '../application/auth_controller.dart';
 import '../domain/auth_destinations.dart';
@@ -28,6 +32,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   String? _emailError;
   String? _passwordError;
   String? _serverError;
+  ConnectionFailure? _connectionFailure;
 
   @override
   void dispose() {
@@ -45,6 +50,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       _emailError = emailError;
       _passwordError = passwordError;
       _serverError = null;
+      _connectionFailure = null;
     });
     return emailError == null && passwordError == null;
   }
@@ -69,16 +75,31 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       context.go(
         destinationAfterAuth(role: user.activeRole, pendingDeepLink: pending),
       );
+    } on ConnectivityException catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _connectionFailure = error.failure;
+        _serverError = null;
+      });
+      await ref.read(healthStatusProvider.notifier).check();
     } on ApiException catch (error) {
       if (!mounted) {
         return;
       }
-      setState(() => _serverError = error.message);
+      setState(() {
+        _serverError = error.message;
+        _connectionFailure = null;
+      });
     } on Object {
       if (!mounted) {
         return;
       }
-      setState(() => _serverError = 'Sign in failed.');
+      setState(() {
+        _serverError = 'Sign in failed.';
+        _connectionFailure = null;
+      });
     } finally {
       if (mounted) {
         setState(() => _submitting = false);
@@ -165,18 +186,25 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               ),
             ),
           ),
-          if (_serverError != null) ...[
+          if (_connectionFailure != null) ...[
+            ConnectionFailurePanel(
+              failure: _connectionFailure!,
+              onRetry: _submit,
+            ),
+            const SizedBox(height: AppSpacing.sm),
+          ] else if (_serverError != null) ...[
             Text(_serverError!, style: AppTypography.error),
             const SizedBox(height: AppSpacing.sm),
           ],
-          GlassButton(
-            key: const Key('sign-in-button'),
-            label: 'Sign in',
-            variant: GlassButtonVariant.primary,
-            expand: true,
-            loading: _submitting,
-            onPressed: _submit,
-          ),
+          if (_connectionFailure == null)
+            GlassButton(
+              key: const Key('sign-in-button'),
+              label: 'Sign in',
+              variant: GlassButtonVariant.primary,
+              expand: true,
+              loading: _submitting,
+              onPressed: _submit,
+            ),
         ],
       ),
     );

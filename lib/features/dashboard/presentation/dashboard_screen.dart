@@ -1,16 +1,25 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../core/auth/auth_state.dart';
+import '../../../core/router/app_routes.dart';
 import '../../../core/router/root_page.dart';
 import '../../../core/theme/app_tokens.dart';
 import '../../../shared/widgets/glass_button.dart';
-import '../../../shared/widgets/glass_card.dart';
 import '../../../shared/widgets/glass_scene.dart';
 import '../../auth/application/auth_controller.dart';
+import '../../bookings/presentation/admin_bookings_tab.dart';
+import '../../notifications/presentation/alerts_tab.dart';
+import '../../rooms/presentation/rooms_tab.dart';
+import '../../tickets/domain/ticket_models.dart';
+import '../../tickets/presentation/tickets_list_screen.dart';
+import '../../users/presentation/users_tab.dart';
 import '../application/dashboard_controller.dart';
+import '../application/shell_nav.dart';
 import '../domain/dashboard_models.dart';
 import 'profile_tab.dart';
+import 'team_tab.dart';
 import 'widgets/dashboard_widgets.dart';
 
 /// Signed-in shell. One bottom bar per role. Back: non-home → home; home → minimize.
@@ -25,8 +34,6 @@ class DashboardScreen extends ConsumerStatefulWidget {
 }
 
 class _DashboardScreenState extends ConsumerState<DashboardScreen> {
-  var _index = 0;
-
   @override
   Widget build(BuildContext context) {
     final auth = ref.watch(authControllerProvider);
@@ -42,10 +49,14 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       );
     }
 
-    final tabs = _tabsFor(user.activeRole);
+    final role = user.activeRole;
+    final roleRoot = AppRoutes.dashboardFor(role);
+    final tabs = _tabsFor(role);
+    final nav = ref.watch(shellNavProvider);
     final homeIndex = 0;
-    final index = _index.clamp(0, tabs.length - 1);
+    final index = nav.tabIndex.clamp(0, tabs.length - 1);
     final minimize = widget.onMinimize ?? RootPage.minimizeApp;
+    final unread = ref.watch(unreadAlertsCountProvider);
 
     return PopScope(
       canPop: false,
@@ -54,7 +65,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           return;
         }
         if (index != homeIndex) {
-          setState(() => _index = homeIndex);
+          ref.read(shellNavProvider.notifier).selectTab(homeIndex);
           return;
         }
         minimize();
@@ -70,13 +81,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                   child: IndexedStack(
                     index: index,
                     children: [
-                      for (final tab in tabs)
-                        if (tab.kind == _TabKind.home)
-                          _HomeBody(role: user.activeRole, email: user.email)
-                        else if (tab.kind == _TabKind.profile)
-                          ProfileTab(user: user)
-                        else
-                          _LaterTab(title: tab.label),
+                      for (final tab in tabs) _tabBody(tab, role, roleRoot),
                     ],
                   ),
                 ),
@@ -84,7 +89,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               _GlassNavBar(
                 tabs: tabs,
                 index: index,
-                onSelected: (value) => setState(() => _index = value),
+                unread: unread,
+                onSelected: (value) =>
+                    ref.read(shellNavProvider.notifier).selectTab(value),
               ),
             ],
           ),
@@ -92,17 +99,45 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       ),
     );
   }
+
+  Widget _tabBody(_TabSpec tab, String role, String roleRoot) {
+    switch (tab.kind) {
+      case _TabKind.home:
+        return _HomeBody(role: role, roleRoot: roleRoot);
+      case _TabKind.tickets:
+        return TicketsListScreen(roleRoot: roleRoot);
+      case _TabKind.rooms:
+        return RoomsTab(roleRoot: roleRoot);
+      case _TabKind.alerts:
+        return const AlertsTab();
+      case _TabKind.team:
+        return const TeamTab();
+      case _TabKind.bookings:
+        return const AdminBookingsTab();
+      case _TabKind.users:
+        return const UsersTab();
+      case _TabKind.profile:
+        final auth = ref.watch(authControllerProvider);
+        final user = auth is AuthSignedIn ? auth.user : null;
+        if (user == null) {
+          return const SizedBox.shrink();
+        }
+        return ProfileTab(user: user);
+    }
+  }
 }
 
 class _GlassNavBar extends StatelessWidget {
   const _GlassNavBar({
     required this.tabs,
     required this.index,
+    required this.unread,
     required this.onSelected,
   });
 
   final List<_TabSpec> tabs;
   final int index;
+  final int unread;
   final ValueChanged<int> onSelected;
 
   @override
@@ -124,6 +159,9 @@ class _GlassNavBar extends StatelessWidget {
                     key: Key('nav-${tabs[i].label.toLowerCase()}'),
                     spec: tabs[i],
                     selected: i == index,
+                    badge: tabs[i].kind == _TabKind.alerts && unread > 0
+                        ? unread
+                        : null,
                     onTap: () => onSelected(i),
                   ),
                 ),
@@ -141,11 +179,13 @@ class _GlassNavItem extends StatelessWidget {
     required this.spec,
     required this.selected,
     required this.onTap,
+    this.badge,
   });
 
   final _TabSpec spec;
   final bool selected;
   final VoidCallback onTap;
+  final int? badge;
 
   @override
   Widget build(BuildContext context) {
@@ -153,7 +193,7 @@ class _GlassNavItem extends StatelessWidget {
     return Semantics(
       button: true,
       selected: selected,
-      label: spec.label,
+      label: badge == null ? spec.label : '${spec.label}, $badge unread',
       child: InkWell(
         onTap: onTap,
         child: ConstrainedBox(
@@ -164,7 +204,11 @@ class _GlassNavItem extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(spec.icon, color: color, size: 22),
+                Badge(
+                  isLabelVisible: badge != null,
+                  label: Text('${badge ?? 0}'),
+                  child: Icon(spec.icon, color: color, size: 22),
+                ),
                 const SizedBox(height: 2),
                 Text(
                   spec.label,
@@ -181,10 +225,19 @@ class _GlassNavItem extends StatelessWidget {
   }
 }
 
-enum _TabKind { home, later, profile }
+enum _TabKind {
+  home,
+  tickets,
+  rooms,
+  alerts,
+  team,
+  bookings,
+  users,
+  profile,
+}
 
 class _TabSpec {
-  const _TabSpec(this.label, this.icon, {this.kind = _TabKind.later});
+  const _TabSpec(this.label, this.icon, this.kind);
 
   final String label;
   final IconData icon;
@@ -195,44 +248,51 @@ List<_TabSpec> _tabsFor(String role) {
   switch (role) {
     case 'ADMIN':
       return const [
-        _TabSpec('Overview', Icons.dashboard_outlined, kind: _TabKind.home),
-        _TabSpec('Bookings', Icons.event_outlined),
-        _TabSpec('People', Icons.group_outlined),
-        _TabSpec('Profile', Icons.person_outline, kind: _TabKind.profile),
+        _TabSpec('Overview', Icons.dashboard_outlined, _TabKind.home),
+        _TabSpec('Tickets', Icons.confirmation_number_outlined, _TabKind.tickets),
+        _TabSpec('Bookings', Icons.event_outlined, _TabKind.bookings),
+        _TabSpec('Users', Icons.group_outlined, _TabKind.users),
+        _TabSpec('Profile', Icons.person_outline, _TabKind.profile),
       ];
     case 'TEAM_LEAD':
       return const [
-        _TabSpec('Queue', Icons.inbox_outlined, kind: _TabKind.home),
-        _TabSpec('Team', Icons.groups_outlined),
-        _TabSpec('Alerts', Icons.notifications_none),
-        _TabSpec('Profile', Icons.person_outline, kind: _TabKind.profile),
+        _TabSpec('Queue', Icons.inbox_outlined, _TabKind.home),
+        _TabSpec('Team', Icons.groups_outlined, _TabKind.team),
+        _TabSpec('Rooms', Icons.meeting_room_outlined, _TabKind.rooms),
+        _TabSpec('Alerts', Icons.notifications_none, _TabKind.alerts),
+        _TabSpec('Profile', Icons.person_outline, _TabKind.profile),
       ];
     case 'AGENT':
       return const [
-        _TabSpec('Queue', Icons.inbox_outlined, kind: _TabKind.home),
-        _TabSpec('Tickets', Icons.confirmation_number_outlined),
-        _TabSpec('Alerts', Icons.notifications_none),
-        _TabSpec('Profile', Icons.person_outline, kind: _TabKind.profile),
+        _TabSpec('Queue', Icons.inbox_outlined, _TabKind.home),
+        _TabSpec('Tickets', Icons.confirmation_number_outlined, _TabKind.tickets),
+        _TabSpec('Rooms', Icons.meeting_room_outlined, _TabKind.rooms),
+        _TabSpec('Alerts', Icons.notifications_none, _TabKind.alerts),
+        _TabSpec('Profile', Icons.person_outline, _TabKind.profile),
       ];
     default:
+      // USER: Rooms always shown — no Express settings route for
+      // customers_can_book_rooms in docs/API.md (reported as gap).
       return const [
-        _TabSpec('Home', Icons.home_outlined, kind: _TabKind.home),
-        _TabSpec('Tickets', Icons.confirmation_number_outlined),
-        _TabSpec('Bookings', Icons.event_outlined),
-        _TabSpec('Alerts', Icons.notifications_none),
-        _TabSpec('Profile', Icons.person_outline, kind: _TabKind.profile),
+        _TabSpec('Home', Icons.home_outlined, _TabKind.home),
+        _TabSpec('Tickets', Icons.confirmation_number_outlined, _TabKind.tickets),
+        _TabSpec('Rooms', Icons.meeting_room_outlined, _TabKind.rooms),
+        _TabSpec('Alerts', Icons.notifications_none, _TabKind.alerts),
+        _TabSpec('Profile', Icons.person_outline, _TabKind.profile),
       ];
   }
 }
 
 class _HomeBody extends ConsumerWidget {
-  const _HomeBody({required this.role, required this.email});
+  const _HomeBody({required this.role, required this.roleRoot});
 
   final String role;
-  final String email;
+  final String roleRoot;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final auth = ref.watch(authControllerProvider);
+    final email = auth is AuthSignedIn ? auth.user.email : '';
     final ui = ref.watch(dashboardControllerProvider);
     return RefreshIndicator(
       color: AppColors.accent,
@@ -267,7 +327,7 @@ class _HomeBody extends ConsumerWidget {
                   ref.read(dashboardControllerProvider.notifier).refresh(),
             )
           else ...[
-            _RoleDashboard(role: role, data: ui.data),
+            _RoleDashboard(role: role, roleRoot: roleRoot, data: ui.data),
             if (ui.errorMessage != null) ...[
               const SizedBox(height: AppSpacing.md),
               Text(ui.errorMessage!, style: AppTypography.error),
@@ -319,63 +379,93 @@ class _ErrorBlock extends StatelessWidget {
   }
 }
 
-class _RoleDashboard extends StatelessWidget {
-  const _RoleDashboard({required this.role, required this.data});
+class _RoleDashboard extends ConsumerWidget {
+  const _RoleDashboard({
+    required this.role,
+    required this.roleRoot,
+    required this.data,
+  });
 
   final String role;
+  final String roleRoot;
   final DashboardData? data;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     if (data is UserDashboardData) {
-      return _UserHome(data: (data! as UserDashboardData).value);
+      return _UserHome(
+        data: (data! as UserDashboardData).value,
+        roleRoot: roleRoot,
+      );
     }
     if (data is StaffDashboardData) {
       return _StaffHome(
         data: (data! as StaffDashboardData).value,
         lead: role == 'TEAM_LEAD',
+        role: role,
       );
     }
     if (data is AdminDashboardData) {
-      return _AdminHome(data: (data! as AdminDashboardData).value);
+      return _AdminHome(
+        data: (data! as AdminDashboardData).value,
+        role: role,
+      );
     }
     return const DashboardSkeleton();
   }
 }
 
-class _UserHome extends StatelessWidget {
-  const _UserHome({required this.data});
+class _UserHome extends ConsumerWidget {
+  const _UserHome({required this.data, required this.roleRoot});
 
   final UserDashboard data;
+  final String roleRoot;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final empty = data.openTickets == 0 &&
         data.awaitingReply == 0 &&
         data.unreadAlerts == 0 &&
         data.nextBooking == null &&
         data.recentTickets.isEmpty;
+    final nav = ref.read(shellNavProvider.notifier);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         HeroMetricCard(
           label: 'Open tickets',
           value: '${data.openTickets}',
+          onTap: () => nav.openTickets(
+            'USER',
+            const TicketListQuery(status: 'OPEN'),
+          ),
         ),
         const SizedBox(height: AppSpacing.md),
         Wrap(
           spacing: AppSpacing.sm,
           runSpacing: AppSpacing.sm,
           children: [
-            CountPill(label: 'Awaiting reply', value: '${data.awaitingReply}'),
-            CountPill(label: 'Unread alerts', value: '${data.unreadAlerts}'),
+            CountPill(
+              label: 'Awaiting reply',
+              value: '${data.awaitingReply}',
+              onTap: () => nav.openTickets(
+                'USER',
+                const TicketListQuery(status: 'PENDING_CUSTOMER'),
+              ),
+            ),
+            CountPill(
+              label: 'Unread alerts',
+              value: '${data.unreadAlerts}',
+              onTap: () => nav.openAlerts('USER'),
+            ),
           ],
         ),
         const SizedBox(height: AppSpacing.md),
         if (data.nextBooking == null)
-          const IdleGlassRow(
+          IdleGlassRow(
             title: 'Next booking',
             detail: 'No upcoming booking',
+            onTap: () => nav.openRooms('USER'),
           )
         else
           IdleGlassRow(
@@ -383,17 +473,22 @@ class _UserHome extends StatelessWidget {
             detail:
                 '${data.nextBooking!.meetingTitle ?? 'Booking'} · ${data.nextBooking!.teamName ?? ''}'
                     .trim(),
+            onTap: () => nav.openRooms('USER'),
           ),
         const SizedBox(height: AppSpacing.md),
         Text('Recent tickets', style: AppTypography.sectionTitle),
         const SizedBox(height: AppSpacing.sm),
         if (data.recentTickets.isEmpty)
-          const IdleGlassRow(title: 'No recent tickets')
+          IdleGlassRow(
+            title: 'No recent tickets',
+            onTap: () => nav.openTickets('USER', const TicketListQuery()),
+          )
         else
           for (final ticket in data.recentTickets) ...[
             IdleGlassRow(
               title: '${ticket.number} · ${ticket.subject}',
               detail: '${ticket.status} · ${ticket.priority}',
+              onTap: () => context.push('$roleRoot/tickets/${ticket.id}'),
             ),
             const SizedBox(height: AppSpacing.sm),
           ],
@@ -412,63 +507,96 @@ class _UserHome extends StatelessWidget {
           label: 'New ticket',
           variant: GlassButtonVariant.primary,
           expand: true,
-          onPressed: () {
-            showDialog<void>(
-              context: context,
-              builder: (context) => Dialog(
-                backgroundColor: Colors.transparent,
-                child: GlassCard(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      const Text('New ticket', style: AppTypography.title),
-                      const SizedBox(height: AppSpacing.sm),
-                      const Text(
-                        'Arrives in the next update.',
-                        style: AppTypography.body,
-                      ),
-                      const SizedBox(height: AppSpacing.lg),
-                      GlassButton(
-                        label: 'Close',
-                        variant: GlassButtonVariant.outlined,
-                        onPressed: () => Navigator.of(context).pop(),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            );
-          },
+          onPressed: () => context.push('$roleRoot/tickets/new'),
         ),
       ],
     );
   }
 }
 
-class _StaffHome extends StatelessWidget {
-  const _StaffHome({required this.data, required this.lead});
+void _openTickets(
+  BuildContext context,
+  ShellNavController nav,
+  String role,
+  TicketListQuery filter,
+) {
+  final opened = nav.openTickets(role, filter);
+  if (!opened) {
+    context.push(AppRoutes.ticketsPath(AppRoutes.dashboardFor(role)));
+  }
+}
+
+class _StaffHome extends ConsumerWidget {
+  const _StaffHome({
+    required this.data,
+    required this.lead,
+    required this.role,
+  });
 
   final StaffDashboard data;
   final bool lead;
+  final String role;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final nav = ref.read(shellNavProvider.notifier);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        HeroMetricCard(label: 'My queue', value: '${data.queue}'),
+        HeroMetricCard(
+          label: 'My queue',
+          value: '${data.queue}',
+          onTap: () => _openTickets(
+            context,
+            nav,
+            role,
+            const TicketListQuery(),
+          ),
+        ),
         const SizedBox(height: AppSpacing.md),
         Wrap(
           spacing: AppSpacing.sm,
           runSpacing: AppSpacing.sm,
           children: [
-            CountPill(label: 'Unassigned', value: '${data.unassigned}'),
-            CountPill(label: 'SLA at risk', value: '${data.slaAtRisk}'),
-            CountPill(label: 'SLA overdue', value: '${data.slaOverdue}'),
+            CountPill(
+              label: 'Unassigned',
+              value: '${data.unassigned}',
+              onTap: () => _openTickets(
+                context,
+                nav,
+                role,
+                const TicketListQuery(status: 'OPEN'),
+              ),
+            ),
+            CountPill(
+              label: 'SLA at risk',
+              value: '${data.slaAtRisk}',
+              onTap: () => _openTickets(
+                context,
+                nav,
+                role,
+                const TicketListQuery(sla: 'at_risk'),
+              ),
+            ),
+            CountPill(
+              label: 'SLA overdue',
+              value: '${data.slaOverdue}',
+              onTap: () => _openTickets(
+                context,
+                nav,
+                role,
+                const TicketListQuery(sla: 'overdue'),
+              ),
+            ),
             CountPill(
               label: 'Waiting on customer',
               value: '${data.waitingOnCustomer}',
+              onTap: () => _openTickets(
+                context,
+                nav,
+                role,
+                const TicketListQuery(status: 'PENDING_CUSTOMER'),
+              ),
             ),
           ],
         ),
@@ -477,12 +605,16 @@ class _StaffHome extends StatelessWidget {
           Text('Team workload', style: AppTypography.sectionTitle),
           const SizedBox(height: AppSpacing.sm),
           if (data.workload == null || data.workload!.isEmpty)
-            const IdleGlassRow(title: 'No workload data')
+            IdleGlassRow(
+              title: 'No workload data',
+              onTap: () => nav.openTeam(role),
+            )
           else
             for (final row in data.workload!) ...[
               IdleGlassRow(
                 title: row.name,
                 detail: '${row.openTickets} open',
+                onTap: () => nav.openTeam(role),
               ),
               const SizedBox(height: AppSpacing.sm),
             ],
@@ -492,13 +624,19 @@ class _StaffHome extends StatelessWidget {
               title: 'SLA compliance',
               detail: '${data.slaCompliance!.percent}% '
                   '(${data.slaCompliance!.met}/${data.slaCompliance!.total})',
+              onTap: () => nav.openTeam(role),
             )
           else
-            const IdleGlassRow(title: 'SLA compliance', detail: '—'),
+            IdleGlassRow(
+              title: 'SLA compliance',
+              detail: '—',
+              onTap: () => nav.openTeam(role),
+            ),
           const SizedBox(height: AppSpacing.sm),
           IdleGlassRow(
             title: 'CSAT average',
             detail: data.csatAverage == null ? '—' : '${data.csatAverage}',
+            onTap: () => nav.openTeam(role),
           ),
         ],
       ],
@@ -506,22 +644,25 @@ class _StaffHome extends StatelessWidget {
   }
 }
 
-class _AdminHome extends StatefulWidget {
-  const _AdminHome({required this.data});
+class _AdminHome extends ConsumerStatefulWidget {
+  const _AdminHome({required this.data, required this.role});
 
   final AdminDashboard data;
+  final String role;
 
   @override
-  State<_AdminHome> createState() => _AdminHomeState();
+  ConsumerState<_AdminHome> createState() => _AdminHomeState();
 }
 
-class _AdminHomeState extends State<_AdminHome> {
+class _AdminHomeState extends ConsumerState<_AdminHome> {
   var _segment = 0;
 
   @override
   Widget build(BuildContext context) {
     final data = widget.data;
     final summary = data.summary;
+    final nav = ref.read(shellNavProvider.notifier);
+    final role = widget.role;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -530,17 +671,63 @@ class _AdminHomeState extends State<_AdminHome> {
           value: '${summary.teamOpen}',
           semanticsLabel:
               'Summary team open ${summary.teamOpen}, mine ${summary.mine}',
+          onTap: () => _openTickets(
+            context,
+            nav,
+            role,
+            const TicketListQuery(),
+          ),
         ),
         const SizedBox(height: AppSpacing.sm),
         Wrap(
           spacing: AppSpacing.sm,
           runSpacing: AppSpacing.sm,
           children: [
-            CountPill(label: 'Mine', value: '${summary.mine}'),
-            CountPill(label: 'Unassigned', value: '${summary.unassigned}'),
-            CountPill(label: 'At risk', value: '${summary.atRisk}'),
-            CountPill(label: 'Breached', value: '${summary.breached}'),
-            CountPill(label: 'Users', value: '${data.userCount}'),
+            CountPill(
+              label: 'Mine',
+              value: '${summary.mine}',
+              onTap: () => _openTickets(
+                context,
+                nav,
+                role,
+                const TicketListQuery(),
+              ),
+            ),
+            CountPill(
+              label: 'Unassigned',
+              value: '${summary.unassigned}',
+              onTap: () => _openTickets(
+                context,
+                nav,
+                role,
+                const TicketListQuery(status: 'OPEN'),
+              ),
+            ),
+            CountPill(
+              label: 'At risk',
+              value: '${summary.atRisk}',
+              onTap: () => _openTickets(
+                context,
+                nav,
+                role,
+                const TicketListQuery(sla: 'at_risk'),
+              ),
+            ),
+            CountPill(
+              label: 'Breached',
+              value: '${summary.breached}',
+              onTap: () => _openTickets(
+                context,
+                nav,
+                role,
+                const TicketListQuery(sla: 'overdue'),
+              ),
+            ),
+            CountPill(
+              label: 'Users',
+              value: '${data.userCount}',
+              onTap: () => nav.openUsers(role),
+            ),
           ],
         ),
         const SizedBox(height: AppSpacing.md),
@@ -553,12 +740,30 @@ class _AdminHomeState extends State<_AdminHome> {
         const SizedBox(height: AppSpacing.sm),
         if (_segment == 0)
           for (final row in data.byStatus) ...[
-            IdleGlassRow(title: row.status, detail: '${row.tickets} tickets'),
+            IdleGlassRow(
+              title: row.status,
+              detail: '${row.tickets} tickets',
+              onTap: () => _openTickets(
+                context,
+                nav,
+                role,
+                TicketListQuery(status: row.status),
+              ),
+            ),
             const SizedBox(height: AppSpacing.sm),
           ]
         else
           for (final row in data.byPriority) ...[
-            IdleGlassRow(title: row.priority, detail: '${row.tickets} tickets'),
+            IdleGlassRow(
+              title: row.priority,
+              detail: '${row.tickets} tickets',
+              onTap: () => _openTickets(
+                context,
+                nav,
+                role,
+                TicketListQuery(priority: row.priority),
+              ),
+            ),
             const SizedBox(height: AppSpacing.sm),
           ],
         const SizedBox(height: AppSpacing.md),
@@ -576,8 +781,13 @@ class _AdminHomeState extends State<_AdminHome> {
           ],
         IdleGlassRow(
           title: 'SLA',
-          detail:
-              '${data.sla.percent}% (${data.sla.met}/${data.sla.total})',
+          detail: '${data.sla.percent}% (${data.sla.met}/${data.sla.total})',
+          onTap: () => _openTickets(
+            context,
+            nav,
+            role,
+            const TicketListQuery(sla: 'at_risk'),
+          ),
         ),
         const SizedBox(height: AppSpacing.sm),
         Text('Workload', style: AppTypography.sectionTitle),
@@ -597,38 +807,19 @@ class _AdminHomeState extends State<_AdminHome> {
         Text("Today's bookings", style: AppTypography.sectionTitle),
         const SizedBox(height: AppSpacing.sm),
         if (data.todaysBookings.isEmpty)
-          const IdleGlassRow(title: 'No bookings today')
+          IdleGlassRow(
+            title: 'No bookings today',
+            onTap: () => nav.openBookings(role),
+          )
         else
           for (final booking in data.todaysBookings) ...[
             IdleGlassRow(
               title: booking.meetingTitle ?? 'Booking',
               detail: booking.teamName ?? booking.startAt,
+              onTap: () => nav.openBookings(role),
             ),
             const SizedBox(height: AppSpacing.sm),
           ],
-      ],
-    );
-  }
-}
-
-class _LaterTab extends StatelessWidget {
-  const _LaterTab({required this.title});
-
-  final String title;
-
-  @override
-  Widget build(BuildContext context) {
-    return ListView(
-      padding: const EdgeInsets.all(AppSpacing.screenHorizontal),
-      children: [
-        Text(title, style: AppTypography.title),
-        const SizedBox(height: AppSpacing.md),
-        const GlassCard(
-          child: Text(
-            'Arrives in a later update.',
-            style: AppTypography.body,
-          ),
-        ),
       ],
     );
   }

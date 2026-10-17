@@ -6,15 +6,22 @@ abstract final class AppRoutes {
   static const forgotPassword = '/forgot-password';
   static const resetPassword = '/reset-password';
   static const offline = '/offline';
+  static const debugAddress = '/debug-address';
   static const home = '/home';
   static const staff = '/staff';
   static const admin = '/admin';
+
+  static String ticketsPath(String roleRoot) => '$roleRoot/tickets';
+  static String ticketNewPath(String roleRoot) => '$roleRoot/tickets/new';
+  static String ticketDetailPath(String roleRoot, String id) =>
+      '$roleRoot/tickets/$id';
 
   static const public = <String>{
     welcome,
     login,
     forgotPassword,
     resetPassword,
+    debugAddress,
   };
 
   static const privateRoots = <String>{home, staff, admin};

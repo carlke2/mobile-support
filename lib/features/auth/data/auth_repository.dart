@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/network/api_client.dart';
 import '../../../core/network/api_exception.dart';
+import '../../../core/network/connectivity_exception.dart';
 import '../../../core/storage/token_storage.dart';
 import '../domain/auth_user.dart';
 
@@ -135,6 +136,8 @@ class BackendAuthRepository implements AuthRepository {
       final user = await _loadProfile();
       await _tokens.write(token, profile: jsonEncode(user.toJson()));
       return SessionReady(user);
+    } on ConnectivityException {
+      return SessionOffline(await _cachedUser());
     } on ApiException catch (error) {
       if (error is ApiExceptionBackend && error.statusCode == 401) {
         await _tokens.clear();

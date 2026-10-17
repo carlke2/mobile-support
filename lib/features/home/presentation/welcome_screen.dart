@@ -1,23 +1,52 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/config/app_config.dart';
+import '../../../core/network/health_status.dart';
 import '../../../core/router/app_routes.dart';
 import '../../../core/theme/app_tokens.dart';
 import '../../../shared/widgets/app_logo.dart';
 import '../../../shared/widgets/glass_button.dart';
 import '../../../shared/widgets/glass_scene.dart';
 
-class WelcomeScreen extends StatefulWidget {
+class WelcomeScreen extends ConsumerStatefulWidget {
   const WelcomeScreen({super.key});
 
   @override
-  State<WelcomeScreen> createState() => _WelcomeScreenState();
+  ConsumerState<WelcomeScreen> createState() => _WelcomeScreenState();
 }
 
-class _WelcomeScreenState extends State<WelcomeScreen> {
+class _WelcomeScreenState extends ConsumerState<WelcomeScreen>
+    with WidgetsBindingObserver {
   int? _pressedTile;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      ref.read(healthStatusProvider.notifier).check();
+    }
+  }
+
+  void _openDebugAddress() {
+    if (!kDebugMode) {
+      return;
+    }
+    context.push(AppRoutes.debugAddress);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -35,14 +64,17 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const _TopBar(),
+                _TopBar(onLogoLongPress: _openDebugAddress),
                 Expanded(
                   child: SingleChildScrollView(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         const SizedBox(height: 14),
-                        const _ShadowedLogo(size: 62),
+                        _ShadowedLogo(
+                          size: 62,
+                          onLongPress: _openDebugAddress,
+                        ),
                         const SizedBox(height: 12),
                         const Text('Welcome', style: AppTypography.hero),
                         const SizedBox(height: AppSpacing.xs),
@@ -53,6 +85,8 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                             style: AppTypography.lead,
                           ),
                         ),
+                        const SizedBox(height: AppSpacing.sm),
+                        const _HealthStatusChip(),
                         const SizedBox(height: AppSpacing.md),
                         GlassButton(
                           label: 'Sign in',
@@ -93,18 +127,53 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
   }
 }
 
+class _HealthStatusChip extends ConsumerWidget {
+  const _HealthStatusChip();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final health = ref.watch(healthStatusProvider);
+    final label = health.when(
+      data: (result) => result.chipLabel,
+      loading: () => 'Checking…',
+      error: (_, _) => "Can't reach server",
+    );
+    final connected = health.asData?.value.connected == true;
+    return Semantics(
+      label: 'Server status $label',
+      child: InputChip(
+        key: const Key('health-status-chip'),
+        label: Text(label),
+        avatar: Icon(
+          connected ? Icons.check_circle_outline : Icons.error_outline,
+          size: 18,
+          color: connected ? AppColors.onAccent : AppColors.error,
+        ),
+        onPressed: () {
+          ref.read(healthStatusProvider.notifier).check();
+        },
+      ),
+    );
+  }
+}
+
 class _TopBar extends StatelessWidget {
-  const _TopBar();
+  const _TopBar({required this.onLogoLongPress});
+
+  final VoidCallback onLogoLongPress;
 
   @override
   Widget build(BuildContext context) {
-    return const Row(
+    return Row(
       children: [
-        _BarButton(label: 'Menu', child: _MenuGlyph()),
-        Spacer(),
-        AppLogo(size: 26),
-        Spacer(),
-        _BarButton(
+        const _BarButton(label: 'Menu', child: _MenuGlyph()),
+        const Spacer(),
+        GestureDetector(
+          onLongPress: onLogoLongPress,
+          child: const AppLogo(size: 26),
+        ),
+        const Spacer(),
+        const _BarButton(
           label: 'Notifications',
           child: Icon(
             Icons.notifications_none,
@@ -183,23 +252,27 @@ class _MenuPainter extends CustomPainter {
 }
 
 class _ShadowedLogo extends StatelessWidget {
-  const _ShadowedLogo({required this.size});
+  const _ShadowedLogo({required this.size, required this.onLongPress});
 
   final double size;
+  final VoidCallback onLongPress;
 
   @override
   Widget build(BuildContext context) {
-    return DecoratedBox(
-      decoration: const BoxDecoration(
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.logoShadow,
-            blurRadius: 12,
-            offset: Offset(0, 4),
-          ),
-        ],
+    return GestureDetector(
+      onLongPress: onLongPress,
+      child: DecoratedBox(
+        decoration: const BoxDecoration(
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.logoShadow,
+              blurRadius: 12,
+              offset: Offset(0, 4),
+            ),
+          ],
+        ),
+        child: AppLogo(size: size),
       ),
-      child: AppLogo(size: size),
     );
   }
 }

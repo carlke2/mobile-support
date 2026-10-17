@@ -10,25 +10,31 @@ class HeroMetricCard extends StatelessWidget {
     required this.label,
     required this.value,
     this.semanticsLabel,
+    this.onTap,
   });
 
   final String label;
   final String value;
   final String? semanticsLabel;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     return Semantics(
+      button: onTap != null,
       label: semanticsLabel ?? '$label $value',
-      child: GlassCard(
-        child: Column(
-          key: const Key('hero-metric'),
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(label, style: AppTypography.caption),
-            const SizedBox(height: AppSpacing.xs),
-            Text(value, style: AppTypography.hero.copyWith(fontSize: 36)),
-          ],
+      child: InkWell(
+        onTap: onTap,
+        child: GlassCard(
+          child: Column(
+            key: const Key('hero-metric'),
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(label, style: AppTypography.caption),
+              const SizedBox(height: AppSpacing.xs),
+              Text(value, style: AppTypography.hero.copyWith(fontSize: 36)),
+            ],
+          ),
         ),
       ),
     );
@@ -41,35 +47,42 @@ class CountPill extends StatelessWidget {
     super.key,
     required this.label,
     required this.value,
+    this.onTap,
   });
 
   final String label;
   final String value;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     return Semantics(
+      button: onTap != null,
       label: '$label $value',
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(AppRadii.pill),
-          border: Border.all(color: AppColors.pillBorder),
-          color: AppColors.glassFill,
-        ),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(minHeight: 44),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: AppSpacing.md,
-              vertical: AppSpacing.sm,
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(label, style: AppTypography.pill),
-                const SizedBox(width: AppSpacing.sm),
-                Text(value, style: AppTypography.label),
-              ],
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(AppRadii.pill),
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(AppRadii.pill),
+            border: Border.all(color: AppColors.pillBorder),
+            color: AppColors.glassFill,
+          ),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 44),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.md,
+                vertical: AppSpacing.sm,
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(label, style: AppTypography.pill),
+                  const SizedBox(width: AppSpacing.sm),
+                  Text(value, style: AppTypography.label),
+                ],
+              ),
             ),
           ),
         ),
@@ -209,24 +222,26 @@ class _Bone extends StatelessWidget {
   }
 }
 
-/// Tappable glass row that intentionally does nothing until part 2.
+/// Tappable glass row used on dashboards and list previews.
 class IdleGlassRow extends StatelessWidget {
   const IdleGlassRow({
     super.key,
     required this.title,
     this.detail,
+    this.onTap,
   });
 
   final String title;
   final String? detail;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     return Semantics(
-      button: true,
+      button: onTap != null,
       label: title,
       child: InkWell(
-        onTap: () {},
+        onTap: onTap,
         child: GlassCard(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,

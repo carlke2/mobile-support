@@ -6,14 +6,20 @@ import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
 import 'core/theme/app_tokens.dart';
 
-/// Shown when the backend URL was not provided.
+/// Shown when the backend URL was not provided or release rejects http.
 class SetupRequiredApp extends StatelessWidget {
-  const SetupRequiredApp({required this.config, super.key});
+  const SetupRequiredApp({
+    required this.config,
+    this.messageOverride,
+    super.key,
+  });
 
   final AppConfig config;
+  final String? messageOverride;
 
   @override
   Widget build(BuildContext context) {
+    final message = messageOverride ?? config.setupMessage;
     return MaterialApp(
       title: 'Boardroom',
       debugShowCheckedModeBanner: false,
@@ -24,7 +30,7 @@ class SetupRequiredApp extends StatelessWidget {
           child: Padding(
             padding: const EdgeInsets.all(AppSpacing.screenHorizontal),
             child: Text(
-              config.setupMessage,
+              message,
               key: const Key('setup-error'),
               style: AppTypography.body,
             ),

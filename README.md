@@ -1,17 +1,14 @@
 # Boardroom
 
-Boardroom booking mobile client
+Boardroom booking mobile client. Talks only to the Express API at `API_BASE_URL`
+in `env/dev.json` (bundled). No Supabase keys in the app.
 
-## Getting Started
+## Run
 
-This project is a starting point for a Flutter application.
+```bash
+cd mobile && flutter run
+```
 
-A few resources to get you started if this is your first Flutter project:
-
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
-
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+Use Cursor’s Run and Debug panel (`.vscode/launch.json`) for debug, profile, or
+release. Put the server’s Reachable address in `env/dev.json` before running on
+a phone on the same Wi‑Fi.

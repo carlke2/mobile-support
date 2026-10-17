@@ -2,6 +2,7 @@ import 'package:boardroom/core/auth/auth_state.dart';
 import 'package:boardroom/core/auth/launch_prefs.dart';
 import 'package:boardroom/core/auth/pending_route.dart';
 import 'package:boardroom/core/config/app_config.dart';
+import 'package:boardroom/core/network/health_status.dart';
 import 'package:boardroom/core/router/app_routes.dart';
 import 'package:boardroom/core/router/root_page.dart';
 import 'package:boardroom/core/storage/token_storage.dart';
@@ -18,6 +19,13 @@ import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'fake_auth_repository.dart';
+
+class _UpHealth extends HealthStatusNotifier {
+  @override
+  Future<HealthCheckResult> build() async {
+    return const HealthCheckResult(connected: true, latencyMs: 1);
+  }
+}
 
 class _LaunchPrefsFake implements LaunchPrefs {
   _LaunchPrefsFake({this.firstLaunch = false});
@@ -66,7 +74,7 @@ void main() {
     FlutterError.onError = previousOnError;
   });
 
-  const config = AppConfig(apiBaseUrl: 'http://127.0.0.1:5000');
+  const config = AppConfig(apiBaseUrl: 'http://192.168.0.10:5000');
 
   String pathOf(GoRouter router) =>
       router.routeInformationProvider.value.uri.path;
@@ -93,6 +101,7 @@ void main() {
           repository ?? FakeAuthRepository(),
         ),
         authControllerProvider.overrideWith(() => _SeededAuth(auth)),
+        healthStatusProvider.overrideWith(_UpHealth.new),
       ],
     );
     addTearDown(container.dispose);
@@ -338,6 +347,7 @@ void main() {
         dashboardCacheProvider.overrideWithValue(MemoryDashboardCache()),
         launchPrefsProvider.overrideWithValue(_LaunchPrefsFake()),
         authRepositoryProvider.overrideWithValue(repository),
+        healthStatusProvider.overrideWith(_UpHealth.new),
       ],
     );
     addTearDown(container.dispose);

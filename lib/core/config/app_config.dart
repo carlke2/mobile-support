@@ -1,12 +1,13 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-/// Local API used when `env/dev.json` has no `API_BASE_URL`.
-const defaultApiBaseUrl = 'http://127.0.0.1:5000';
-
 /// Runtime configuration loaded from the bundled `env/dev.json` file.
+///
+/// `API_BASE_URL` is read only here. The HTTP client is the only consumer
+/// of [apiBaseUrl] for network calls (`core/network/api_client.dart`).
 class AppConfig {
   const AppConfig({
     this.apiBaseUrl = '',
@@ -44,7 +45,26 @@ class AppConfig {
     return 'Backend URL missing.';
   }
 
-  /// Reads `mobile/env/dev.json`. A missing file or blank URL uses [defaultApiBaseUrl].
+  /// Release builds must use https. Cleartext is debug-only.
+  String? get releaseUrlError =>
+      releaseUrlErrorFor(apiBaseUrl, releaseMode: kReleaseMode);
+
+  /// Pure gate used by [releaseUrlError] and unit tests.
+  static String? releaseUrlErrorFor(
+    String apiBaseUrl, {
+    required bool releaseMode,
+  }) {
+    if (!releaseMode) {
+      return null;
+    }
+    final url = apiBaseUrl.trim().toLowerCase();
+    if (url.startsWith('http:')) {
+      return 'Release builds require https. Set API_BASE_URL to an https address.';
+    }
+    return null;
+  }
+
+  /// Reads `mobile/env/dev.json`. Blank URL means the app cannot launch.
   static Future<AppConfig> load() async {
     try {
       final decoded = jsonDecode(await rootBundle.loadString('env/dev.json'));
@@ -52,7 +72,7 @@ class AppConfig {
         return AppConfig.fromValues(Map<Object?, Object?>.from(decoded));
       }
     } on Object {
-      // Fall through to the local default.
+      // Fall through to empty config.
     }
     return AppConfig.fromValues(const {});
   }
@@ -62,7 +82,7 @@ class AppConfig {
     final pageSize = int.tryParse(_text(values, 'PAGE_SIZE')) ?? _defaultPageSize;
     final parsedBlur = double.tryParse(_text(values, 'GLASS_BLUR_SIGMA'));
     return AppConfig(
-      apiBaseUrl: url.isEmpty ? defaultApiBaseUrl : url,
+      apiBaseUrl: url,
       supportPhone: _text(values, 'SUPPORT_PHONE'),
       pageSize: pageSize < 1 ? _defaultPageSize : pageSize,
       glassBlurSigma: parsedBlur == null || parsedBlur <= 0

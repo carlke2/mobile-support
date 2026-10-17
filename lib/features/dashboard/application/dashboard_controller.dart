@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/auth/auth_state.dart';
 import '../../../core/network/api_exception.dart';
+import '../../../core/network/connectivity_exception.dart';
 import '../../auth/application/auth_controller.dart';
 import '../data/dashboard_api.dart';
 import '../data/dashboard_cache.dart';
@@ -129,6 +130,18 @@ class DashboardController extends Notifier<DashboardUiState> {
       _attempt = 0;
       _retryTimer?.cancel();
       state = DashboardUiState(data: data);
+    } on ConnectivityException catch (error) {
+      if (gen != _loadGen) {
+        return;
+      }
+      _scheduleRetry();
+      state = state.copyWith(
+        loading: false,
+        refreshing: false,
+        offline: true,
+        clearError: state.data != null,
+        errorMessage: state.data == null ? error.failure.message : null,
+      );
     } on ApiException catch (error) {
       if (gen != _loadGen) {
         return;

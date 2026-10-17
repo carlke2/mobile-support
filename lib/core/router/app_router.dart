@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -9,13 +10,47 @@ import '../../features/auth/presentation/reset_password_screen.dart';
 import '../../features/auth/presentation/splash_screen.dart';
 import '../../features/auth/presentation/offline_screen.dart';
 import '../../features/dashboard/presentation/dashboard_screen.dart';
+import '../../features/debug/presentation/debug_address_screen.dart';
 import '../../features/home/presentation/welcome_screen.dart';
+import '../../features/tickets/presentation/create_ticket_screen.dart';
+import '../../features/tickets/presentation/ticket_detail_screen.dart';
+import '../../features/tickets/presentation/tickets_list_screen.dart';
 import '../auth/auth_state.dart';
 import '../auth/launch_prefs.dart';
 import '../auth/password_recovery.dart';
 import '../auth/pending_route.dart';
 import 'app_routes.dart';
 import 'root_page.dart';
+
+List<RouteBase> _roleRoutes(String root) {
+  return [
+    GoRoute(
+      path: root,
+      pageBuilder: (context, state) => NoTransitionPage(
+        key: state.pageKey,
+        child: const DashboardScreen(),
+      ),
+      routes: [
+        GoRoute(
+          path: 'tickets',
+          builder: (context, state) => TicketsListScreen(roleRoot: root),
+          routes: [
+            GoRoute(
+              path: 'new',
+              builder: (context, state) => CreateTicketScreen(roleRoot: root),
+            ),
+            GoRoute(
+              path: ':id',
+              builder: (context, state) => TicketDetailScreen(
+                ticketId: state.pathParameters['id']!,
+              ),
+            ),
+          ],
+        ),
+      ],
+    ),
+  ];
+}
 
 final routerProvider = Provider<GoRouter>((ref) {
   final refresh = AuthStateListenable.ref(ref);
@@ -119,27 +154,17 @@ final routerProvider = Provider<GoRouter>((ref) {
           child: const OfflineScreen(),
         ),
       ),
-      GoRoute(
-        path: AppRoutes.home,
-        pageBuilder: (context, state) => NoTransitionPage(
-          key: state.pageKey,
-          child: const DashboardScreen(),
+      if (kDebugMode)
+        GoRoute(
+          path: AppRoutes.debugAddress,
+          pageBuilder: (context, state) => RootPage(
+            key: state.pageKey,
+            child: const DebugAddressScreen(),
+          ),
         ),
-      ),
-      GoRoute(
-        path: AppRoutes.staff,
-        pageBuilder: (context, state) => NoTransitionPage(
-          key: state.pageKey,
-          child: const DashboardScreen(),
-        ),
-      ),
-      GoRoute(
-        path: AppRoutes.admin,
-        pageBuilder: (context, state) => NoTransitionPage(
-          key: state.pageKey,
-          child: const DashboardScreen(),
-        ),
-      ),
+      ..._roleRoutes(AppRoutes.home),
+      ..._roleRoutes(AppRoutes.staff),
+      ..._roleRoutes(AppRoutes.admin),
     ],
   );
   ref.onDispose(router.dispose);
